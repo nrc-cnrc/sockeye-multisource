@@ -317,7 +317,8 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             source_vocab_paths = [args.source_vocab] + source_factor_vocab_paths
             target_vocab_path = args.target_vocab
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
-                source_paths=[args.source] + args.source_factors,
+                #source_paths=[args.source] + args.source_factors,
+                source_paths=list(zip(args.source, args.source_factors)),
                 target_path=args.target,
                 source_vocab_paths=source_vocab_paths,
                 target_vocab_path=target_vocab_path,
@@ -905,4 +906,5 @@ def train(args: argparse.Namespace) -> training.TrainState:
         return training_state
 
 if __name__ == "__main__":
+    from pudb import set_trace; set_trace()
     main()

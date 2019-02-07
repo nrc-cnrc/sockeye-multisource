@@ -213,14 +213,14 @@ def load_or_create_vocab(data: str, vocab_path: Optional[str], num_words: int, w
         return vocab_from_json(vocab_path)
 
 
-def load_or_create_vocabs(source_paths: List[str],
+def load_or_create_vocabs(source_paths: List[Tuple[str,List[str]]],
                           target_path: str,
-                          source_vocab_paths: List[Optional[str]],
+                          source_vocab_paths: List[Tuple[Optional[str],List[Optional[str]]]],
                           target_vocab_path: Optional[str],
                           shared_vocab: bool,
                           num_words_source: Optional[int], word_min_count_source: int,
                           num_words_target: Optional[int], word_min_count_target: int,
-                          pad_to_multiple_of: Optional[int] = None) -> Tuple[List[Vocab], Vocab]:
+                          pad_to_multiple_of: Optional[int] = None) -> Tuple[List[List[Vocab]], Vocab]:
     """
     Returns vocabularies for source files (including factors) and target.
     If the respective vocabulary paths are not None, the vocabulary is read from the path and returned.
@@ -238,8 +238,11 @@ def load_or_create_vocabs(source_paths: List[str],
     :param pad_to_multiple_of: If not None, pads the vocabularies to a size that is the next multiple of this int.
     :return: List of source vocabularies (for source and factors), and target vocabulary.
     """
-    source_path, *source_factor_paths = source_paths
-    source_vocab_path, *source_factor_vocab_paths = source_vocab_paths
+    source_path, source_factor_paths = list(zip(*source_paths))
+    source_vocab_path, source_factor_vocab_paths = list(zip(*source_vocab_paths))
+    assert len(source_path) == len(source_vocab_path), 'We should get has many source files as source vocab files.'
+    assert len(source_factor_paths) == len(source_factor_vocab_paths), 'TODO: message'
+    assert all(len(sfp) == len(sfvp) for (sfp, sfvp) in zip(source_factor_paths, source_factor_vocab_paths)), 'We should have has many source factor files as source vocab files.'
 
     logger.info("=============================")
     logger.info("Loading/creating vocabularies")
@@ -272,20 +275,28 @@ def load_or_create_vocabs(source_paths: List[str],
             vocab_source = vocab_target = vocab_from_json(vocab_path)
 
     else:
-        vocab_source = load_or_create_vocab(source_path, source_vocab_path, num_words_source, word_min_count_source,
-                                            pad_to_multiple_of=pad_to_multiple_of)
+        vocab_sources = [ load_or_create_vocab(sp,
+            svp,  # TODO: Sam there should be a source_vocab_path per multi-source
+            num_words_source,
+            word_min_count_source,
+            pad_to_multiple_of=pad_to_multiple_of)
+            for (sp, svp) in zip(source_path, source_vocab_path) ]
+
         vocab_target = load_or_create_vocab(target_path, target_vocab_path, num_words_target, word_min_count_target,
                                             pad_to_multiple_of=pad_to_multiple_of)
 
-    vocab_source_factors = []  # type: List[Vocab]
+    vocab_source_factors = [ [] for _ in vocab_sources ]  # type: List[List[Vocab]]
     if source_factor_paths:
         logger.info("(2) Additional source factor vocabularies")
         # source factor vocabs are always created
-        for factor_path, factor_vocab_path in zip(source_factor_paths, source_factor_vocab_paths):
-            vocab_source_factors.append(load_or_create_vocab(factor_path, factor_vocab_path,
-                                                             num_words_source, word_min_count_target))
+        vocab_source_factors = [ 
+                [ load_or_create_vocab(factor_path,
+                    factor_vocab_path,  # TODO: Sam there should be a factor_vocab_path per multi-source
+                    num_words_source,
+                    word_min_count_source) for (factor_path, factor_vocab_path) in zip(factor_paths, factor_vocab_paths) ]
+                for (factor_paths, factor_vocab_paths) in zip(source_factor_paths, source_factor_vocab_paths) ]
 
-    return [vocab_source] + vocab_source_factors, vocab_target
+    return [ [vocab_source] + vocab_source_factor for (vocab_source, vocab_source_factor) in zip(vocab_sources, vocab_source_factors) ], vocab_target
 
 
 def reverse_vocab(vocab: Vocab) -> InverseVocab:
@@ -340,5 +351,43 @@ def main():
     vocab_to_json(vocab, args.output)
 
 
+def main2():
+    from . import arguments
+    params = argparse.ArgumentParser(description='CLI to build source and target vocab(s).')
+    arguments.add_build_vocab_args(params)
+    args = params.parse_args()
+
+    print(args)
+    import sys
+    #sys.exit()
+
+    num_words, num_words_other = args.num_words
+    num_words = num_words if num_words > 0 else None
+    num_words_other = num_words_other if num_words_other > 0 else None
+    utils.check_condition(num_words == num_words_other,
+                          "Vocabulary CLI only allows a common value for --num-words")
+    word_min_count, word_min_count_other = args.word_min_count
+    utils.check_condition(word_min_count == word_min_count_other,
+                          "Vocabulary CLI only allows a common value for --word-min-count")
+
+    global logger
+    logger = log.setup_main_logger("build_vocab", file_logging=True, console=True,
+                                   path="%s.%s" % (args.output, C.LOG_NAME))
+
+    from pudb import set_trace; set_trace()
+    source, target = load_or_create_vocabs(
+            source_paths= [('corpora/train_en', ['corpora/train_en', 'corpora/train_en']),  ('corpora/test1_en', ['corpora/test1_en', 'corpora/test1_en', 'corpora/test1_en'])],
+            target_path= 'corpora/train_fr',
+            source_vocab_paths= [(None,[]), (None,[])],
+            target_vocab_path= None,
+            shared_vocab= False,
+            num_words_source= 50000,
+            word_min_count_source= 1,
+            num_words_target= 50000,
+            word_min_count_target= 1,
+            pad_to_multiple_of= args.pad_vocab_to_multiple_of)
+
+
 if __name__ == "__main__":
-    main()
+    #main()
+    main2()

@@ -341,12 +341,14 @@ def add_training_data_args(params, required=False):
     params.add_argument(C.TRAINING_ARG_SOURCE, '-s',
                         required=required,
                         type=regular_file(),
-                        help='Source side of parallel training data.')
+                        action='append',
+                        help='Source(s) side of parallel training data.')
     params.add_argument('--source-factors', '-sf',
                         required=False,
                         nargs='+',
                         type=regular_file(),
                         default=[],
+                        action='append',
                         help='File(s) containing additional token-parallel source side factors. Default: %(default)s.')
     params.add_argument(C.TRAINING_ARG_TARGET, '-t',
                         required=required,
@@ -488,6 +490,7 @@ def add_vocab_args(params):
     params.add_argument('--source-vocab',
                         required=False,
                         default=None,
+                        action='append',
                         help='Existing source vocabulary (JSON).')
     params.add_argument('--target-vocab',
                         required=False,
@@ -497,6 +500,7 @@ def add_vocab_args(params):
                         required=False,
                         nargs='+',
                         type=regular_file(),
+                        action='append',
                         default=[],
                         help='Existing source factor vocabulary (-ies) (JSON).')
     params.add_argument(C.VOCAB_ARG_SHARED_VOCAB,
