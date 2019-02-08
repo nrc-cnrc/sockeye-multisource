@@ -52,10 +52,24 @@ def define_buckets(max_seq_len: int, step=10) -> List[int]:
     return buckets
 
 
+def define_multisource_parallel_buckets(max_seq_len_source: int,
+                            max_seq_len_target: int,
+                            bucket_width: int = 10,
+                            length_ratios: List[float] = [1.0]):
+    # TODO: this is not quite respecting the max_seq_len_source &
+    # max_seq_len_target, we need something better here.
+    target_buckets = define_buckets(max_seq_len_target, step=bucket_width)
+    buckets = [ tuple([int(round(size * ratio)) for ratio in length_ratios]) + (size,) for size in target_buckets ]
+
+    assert all(len(bucket) == len(length_ratios)+1 for bucket in buckets)
+
+    return buckets
+
+
 def define_parallel_buckets(max_seq_len_source: int,
                             max_seq_len_target: int,
                             bucket_width: int = 10,
-                            length_ratio: float = 1.0) -> List[Tuple[int, int]]:
+                            length_ratios: float = 1.0):
     """
     Returns (source, target) buckets up to (max_seq_len_source, max_seq_len_target).  The longer side of the data uses
     steps of bucket_width while the shorter side uses steps scaled down by the average target/source length ratio.  If
@@ -812,18 +826,27 @@ def get_training_data_iters(sources: List[List[str]],
     logger.info("Creating training data iterator")
     logger.info("===============================")
     # Pass 1: get target/source length ratios.
-    length_statistics = analyze_sequence_lengths(sources, target, source_vocabs, target_vocab,
-                                                 max_seq_len_source, max_seq_len_target)
+    length_statistics = [ analyze_sequence_lengths(source,
+            target,
+            source_vocab,
+            target_vocab,
+            max_seq_len_source,
+            max_seq_len_target)
+            for source, source_vocab in zip(sources, source_vocabs) ]
 
     if not allow_empty:
-        check_condition(length_statistics.num_sents > 0,
+        check_condition(all(statistics.num_sents > 0 for statistics in length_statistics),
                         "No training sequences found with length smaller or equal than the maximum sequence length."
                         "Consider increasing %s" % C.TRAINING_ARG_MAX_SEQ_LEN)
 
     # define buckets
-    buckets = define_parallel_buckets(max_seq_len_source, max_seq_len_target, bucket_width,
-                                      length_statistics.length_ratio_mean) if bucketing else [
-        (max_seq_len_source, max_seq_len_target)]
+    from pudb import set_trace; set_trace()
+    buckets = define_multisource_parallel_buckets(
+            max_seq_len_source,
+            max_seq_len_target,
+            bucket_width,
+            [ statistics.length_ratio_mean for statistics in length_statistics ]) if bucketing else [
+        (max_seq_len_source,) * len(sources) + (max_seq_len_target,)]
 
     sources_sentences, target_sentences = create_sequence_readers(sources, target, source_vocabs, target_vocab)
 
@@ -1114,7 +1137,8 @@ class SequenceReader(Iterable):
             yield sequence
 
 
-def create_sequence_readers(sources: List[str], target: str,
+def create_sequence_readers(sources: List[str],
+                            target: str,
                             vocab_sources: List[vocab.Vocab],
                             vocab_target: vocab.Vocab) -> Tuple[List[SequenceReader], SequenceReader]:
     """
@@ -1128,6 +1152,26 @@ def create_sequence_readers(sources: List[str], target: str,
     """
     source_sequence_readers = [SequenceReader(source, vocab, add_eos=True) for source, vocab in
                                zip(sources, vocab_sources)]
+    target_sequence_reader = SequenceReader(target, vocab_target, add_bos=True)
+    return source_sequence_readers, target_sequence_reader
+
+
+def create_multisource_sequence_readers(sources: List[List[str]],
+                            target: str,
+                            vocab_sources: List[List[vocab.Vocab]],
+                            vocab_target: vocab.Vocab) -> Tuple[List[List[SequenceReader]], SequenceReader]:
+    """
+    Create source readers with EOS and target readers with BOS.
+
+    :param sources: The file names of source data and factors.
+    :param target: The file name of the target data.
+    :param vocab_sources: The source vocabularies.
+    :param vocab_target: The target vocabularies.
+    :return: The source sequence readers and the target reader.
+    """
+    assert all(len(source) == len(vocab) for (source, vocab) in zip(sources, vocab_sources))
+    source_sequence_readers = [ [ SequenceReader(s, v, add_eos=True) for s, v in zip(source, vocab) ]
+            for source, vocab in zip(sources, vocab_sources)]
     target_sequence_reader = SequenceReader(target, vocab_target, add_bos=True)
     return source_sequence_readers, target_sequence_reader
 

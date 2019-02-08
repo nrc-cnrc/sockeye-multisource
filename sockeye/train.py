@@ -316,8 +316,11 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             #source_factor_vocab_paths = [args.source_factor_vocabs[i] if i < len(args.source_factor_vocabs)
             #                             else None for i in range(len(args.source_factors))]
             #source_vocab_paths = [args.source_vocab] + source_factor_vocab_paths
+            source_vocab_paths = [ [source_vocab] + factor_vocab
+                    for source_vocab, factor_vocab in zip_longest(args.source_vocab, args.source_factor_vocabs, fillvalue=[]) ],
 
-            #target_vocab_path = args.target_vocab
+            target_vocab_path = args.target_vocab
+
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
                 source_and_vocab_path=args.source_and_vocab_path,
                 source_factor_and_vocab_paths=args.source_factor_and_vocab_path,
@@ -339,7 +342,6 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                             len(args.source_factors), len(args.source_factors_num_embed)))
 
         # sources: List[List[str]]
-        from itertools import zip_longest
         sources = [ [source] + factors for source, factors in zip_longest(args.source, args.source_factors, fillvalue=[]) ]
         sources = [ list(map(lambda s: str(os.path.abspath(s)), source)) for source in sources ]
 
@@ -355,7 +357,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             source_vocabs=source_vocabs,
             target_vocab=target_vocab,
             source_vocab_paths=source_vocab_paths,
-            target_vocab_path=target_vocab_path,
+            target_vocab_path=args.target_vocab,
             shared_vocab=shared_vocab,
             batch_size=args.batch_size,
             batch_by_words=batch_by_words,
@@ -909,5 +911,5 @@ def train(args: argparse.Namespace) -> training.TrainState:
         return training_state
 
 if __name__ == "__main__":
-    from pudb import set_trace; set_trace()
+    #from pudb import set_trace; set_trace()
     main()
