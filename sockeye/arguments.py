@@ -489,7 +489,7 @@ def add_device_args(params):
 def add_vocab_args(params):
     params.add_argument('--source-vocab',
                         required=False,
-                        default=None,
+                        default=[None],
                         action='append',
                         help='Existing source vocabulary (JSON).')
     params.add_argument('--target-vocab',

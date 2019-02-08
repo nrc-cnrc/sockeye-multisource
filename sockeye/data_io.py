@@ -764,13 +764,13 @@ def get_prepared_data_iters(prepared_data_dir: str,
     return train_iter, validation_iter, config_data, source_vocabs, target_vocab
 
 
-def get_training_data_iters(sources: List[str],
+def get_training_data_iters(sources: List[List[str]],
                             target: str,
                             validation_sources: Optional[List[str]],
                             validation_target: Optional[str],
-                            source_vocabs: List[vocab.Vocab],
+                            source_vocabs: List[List[vocab.Vocab]],
                             target_vocab: vocab.Vocab,
-                            source_vocab_paths: List[Optional[str]],
+                            source_vocab_paths: List[List[Optional[str]]],
                             target_vocab_path: Optional[str],
                             shared_vocab: bool,
                             batch_size: int,

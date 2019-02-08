@@ -17,7 +17,7 @@ import logging
 import os
 from collections import Counter
 from contextlib import ExitStack
-from itertools import chain, islice
+from itertools import chain, islice, zip_longest
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import constants as C
@@ -213,10 +213,16 @@ def load_or_create_vocab(data: str, vocab_path: Optional[str], num_words: int, w
         return vocab_from_json(vocab_path)
 
 
-def load_or_create_vocabs(source_paths: List[Tuple[str,List[str]]],
+def associate_file_with_vocab(source_paths: List[Tuple[str,List[str]]],
                           target_path: str,
                           source_vocab_paths: List[Tuple[Optional[str],List[Optional[str]]]],
-                          target_vocab_path: Optional[str],
+                          target_vocab_path: Optional[str]):
+    pass
+
+
+def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
+                          source_factor_and_vocab_paths:  List[List[Tuple[str,str]]],
+                          target_and_vocab_path: Tuple[str,str],
                           shared_vocab: bool,
                           num_words_source: Optional[int], word_min_count_source: int,
                           num_words_target: Optional[int], word_min_count_target: int,
@@ -238,11 +244,13 @@ def load_or_create_vocabs(source_paths: List[Tuple[str,List[str]]],
     :param pad_to_multiple_of: If not None, pads the vocabularies to a size that is the next multiple of this int.
     :return: List of source vocabularies (for source and factors), and target vocabulary.
     """
-    source_path, source_factor_paths = list(zip(*source_paths))
-    source_vocab_path, source_factor_vocab_paths = list(zip(*source_vocab_paths))
-    assert len(source_path) == len(source_vocab_path), 'We should get has many source files as source vocab files.'
-    assert len(source_factor_paths) == len(source_factor_vocab_paths), 'TODO: message'
-    assert all(len(sfp) == len(sfvp) for (sfp, sfvp) in zip(source_factor_paths, source_factor_vocab_paths)), 'We should have has many source factor files as source vocab files.'
+    #source_path, source_factor_paths = list(zip(*source_paths))
+    #source_vocab_path, source_factor_vocab_paths = list(zip(*source_vocab_paths))
+    #assert len(source_path) == len(source_vocab_path), 'We should get has many source files as source vocab files.'
+    #assert len(source_factor_paths) == len(source_factor_vocab_paths), 'TODO: message'
+    #assert all(len(source_factor_path) == len(source_factor_vocab_path)
+    #        for (source_factor_path, source_factor_vocab_path) in zip(source_factor_paths, source_factor_vocab_paths)), \
+    #                'We should have has many source factor files as source vocab files.'
 
     logger.info("=============================")
     logger.info("Loading/creating vocabularies")
@@ -275,26 +283,29 @@ def load_or_create_vocabs(source_paths: List[Tuple[str,List[str]]],
             vocab_source = vocab_target = vocab_from_json(vocab_path)
 
     else:
-        vocab_sources = [ load_or_create_vocab(sp,
-            svp,  # TODO: Sam there should be a source_vocab_path per multi-source
+        vocab_sources = [ load_or_create_vocab(path,
+            vocab_path,
             num_words_source,
             word_min_count_source,
             pad_to_multiple_of=pad_to_multiple_of)
-            for (sp, svp) in zip(source_path, source_vocab_path) ]
+            for (path, vocab_path) in source_and_vocab_path ]
 
-        vocab_target = load_or_create_vocab(target_path, target_vocab_path, num_words_target, word_min_count_target,
-                                            pad_to_multiple_of=pad_to_multiple_of)
+        vocab_target = load_or_create_vocab(target_and_vocab_path[0],
+                target_and_vocab_path[1],
+                num_words_target,
+                word_min_count_target,
+                pad_to_multiple_of=pad_to_multiple_of)
 
     vocab_source_factors = [ [] for _ in vocab_sources ]  # type: List[List[Vocab]]
-    if source_factor_paths:
+    if source_factor_and_vocab_paths:
         logger.info("(2) Additional source factor vocabularies")
         # source factor vocabs are always created
         vocab_source_factors = [ 
                 [ load_or_create_vocab(factor_path,
-                    factor_vocab_path,  # TODO: Sam there should be a factor_vocab_path per multi-source
+                    factor_vocab_path,
                     num_words_source,
-                    word_min_count_source) for (factor_path, factor_vocab_path) in zip(factor_paths, factor_vocab_paths) ]
-                for (factor_paths, factor_vocab_paths) in zip(source_factor_paths, source_factor_vocab_paths) ]
+                    word_min_count_source) for (factor_path, factor_vocab_path) in source_factor_and_vocab_path ]
+                for source_factor_and_vocab_path in source_factor_and_vocab_paths ]
 
     return [ [vocab_source] + vocab_source_factor for (vocab_source, vocab_source_factor) in zip(vocab_sources, vocab_source_factors) ], vocab_target
 
@@ -378,7 +389,7 @@ def main2():
     source, target = load_or_create_vocabs(
             source_paths= [('corpora/train_en', ['corpora/train_en', 'corpora/train_en']),  ('corpora/test1_en', ['corpora/test1_en', 'corpora/test1_en', 'corpora/test1_en'])],
             target_path= 'corpora/train_fr',
-            source_vocab_paths= [(None,[]), (None,[])],
+            source_vocab_paths= [(None,[None, None]), (None,[None, None, None])],
             target_vocab_path= None,
             shared_vocab= False,
             num_words_source= 50000,
@@ -386,6 +397,7 @@ def main2():
             num_words_target= 50000,
             word_min_count_target= 1,
             pad_to_multiple_of= args.pad_vocab_to_multiple_of)
+    source
 
 
 if __name__ == "__main__":

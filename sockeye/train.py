@@ -28,6 +28,7 @@ import shutil
 import sys
 import tempfile
 from contextlib import ExitStack
+from itertools import zip_longest
 from typing import Any, cast, Optional, Dict, List, Tuple
 
 import mxnet as mx
@@ -311,17 +312,32 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             target_vocab_path = data_info.target_vocab
 
         else:
+            def make_corpora_vocab_path(source,
+                    source_vocab_paths,
+                    source_factor_paths,
+                    source_factor_vocab_paths):
+                source_and_vocab_path = list(zip_longest(source, source_vocab_paths))
+                source_factor_and_vocab_path = [
+                        list(zip_longest(factor_paths, factor_vocab_paths, fillvalue=None))
+                        for (factor_paths, factor_vocab_paths) in zip_longest(source_factor_paths, source_factor_vocab_paths, fillvalue=[None]) ]
+                return source_and_vocab_path, source_factor_and_vocab_path
+                
+
+            source_and_vocab_path, source_factor_and_vocab_path = make_corpora_vocab_path(source=args.source,
+                source_vocab_paths=args.source_vocab,
+                source_factor_paths=args.source_factors,
+                source_factor_vocab_paths=args.source_factor_vocabs)
+
             # Load or create vocabs
-            source_factor_vocab_paths = [args.source_factor_vocabs[i] if i < len(args.source_factor_vocabs)
-                                         else None for i in range(len(args.source_factors))]
-            source_vocab_paths = [args.source_vocab] + source_factor_vocab_paths
-            target_vocab_path = args.target_vocab
+            #source_factor_vocab_paths = [args.source_factor_vocabs[i] if i < len(args.source_factor_vocabs)
+            #                             else None for i in range(len(args.source_factors))]
+            #source_vocab_paths = [args.source_vocab] + source_factor_vocab_paths
+
+            #target_vocab_path = args.target_vocab
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
-                #source_paths=[args.source] + args.source_factors,
-                source_paths=list(zip(args.source, args.source_factors)),
-                target_path=args.target,
-                source_vocab_paths=source_vocab_paths,
-                target_vocab_path=target_vocab_path,
+                source_and_vocab_path=source_and_vocab_path,
+                source_factor_and_vocab_paths=source_factor_and_vocab_path,
+                target_and_vocab_path=(args.target, args.target_vocab),
                 shared_vocab=shared_vocab,
                 num_words_source=num_words_source,
                 num_words_target=num_words_target,
