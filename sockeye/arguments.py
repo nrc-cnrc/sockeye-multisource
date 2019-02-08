@@ -18,6 +18,7 @@ import argparse
 import os
 import sys
 import types
+from itertools import zip_longest
 from typing import Any, Callable, Dict, List, Tuple, Optional
 
 import yaml
@@ -235,6 +236,16 @@ def file_or_stdin() -> Callable:
             return data_io.smart_open(path)
 
     return parse
+
+
+def tie_corpora_with_vocab(args: argparse.Namespace):
+    source_and_vocab_path = list(zip_longest(args.source, args.source_vocab))
+    source_factor_and_vocab_path = [
+            list(zip_longest(factor_paths, factor_vocab_paths, fillvalue=None))
+            for (factor_paths, factor_vocab_paths) in zip_longest(args.source_factors, args.source_factor_vocabs, fillvalue=[None]) ]
+
+    setattr(args, 'source_and_vocab_path', source_and_vocab_path)
+    setattr(args, 'source_factor_and_vocab_path', source_factor_and_vocab_path)
 
 
 def add_average_args(params):
@@ -523,6 +534,7 @@ def add_vocab_args(params):
                         type=int,
                         default=None,
                         help='Pad vocabulary to a multiple of this integer. Default: %(default)s.')
+    params.set_defaults(tie_corpora_with_vocab=tie_corpora_with_vocab)
 
 
 def add_model_parameters(params):

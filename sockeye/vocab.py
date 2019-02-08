@@ -17,7 +17,7 @@ import logging
 import os
 from collections import Counter
 from contextlib import ExitStack
-from itertools import chain, islice, zip_longest
+from itertools import chain, islice
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import constants as C
@@ -213,13 +213,6 @@ def load_or_create_vocab(data: str, vocab_path: Optional[str], num_words: int, w
         return vocab_from_json(vocab_path)
 
 
-def associate_file_with_vocab(source_paths: List[Tuple[str,List[str]]],
-                          target_path: str,
-                          source_vocab_paths: List[Tuple[Optional[str],List[Optional[str]]]],
-                          target_vocab_path: Optional[str]):
-    pass
-
-
 def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
                           source_factor_and_vocab_paths:  List[List[Tuple[str,str]]],
                           target_and_vocab_path: Tuple[str,str],
@@ -283,14 +276,16 @@ def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
             vocab_source = vocab_target = vocab_from_json(vocab_path)
 
     else:
-        vocab_sources = [ load_or_create_vocab(path,
+        vocab_sources = [ load_or_create_vocab(
+            path,
             vocab_path,
             num_words_source,
             word_min_count_source,
             pad_to_multiple_of=pad_to_multiple_of)
             for (path, vocab_path) in source_and_vocab_path ]
 
-        vocab_target = load_or_create_vocab(target_and_vocab_path[0],
+        vocab_target = load_or_create_vocab(
+                target_and_vocab_path[0],
                 target_and_vocab_path[1],
                 num_words_target,
                 word_min_count_target,

@@ -312,17 +312,6 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             target_vocab_path = data_info.target_vocab
 
         else:
-            def make_corpora_vocab_path(source,
-                    source_vocab_paths,
-                    source_factor_paths,
-                    source_factor_vocab_paths):
-                source_and_vocab_path = list(zip_longest(source, source_vocab_paths))
-                source_factor_and_vocab_path = [
-                        list(zip_longest(factor_paths, factor_vocab_paths, fillvalue=None))
-                        for (factor_paths, factor_vocab_paths) in zip_longest(source_factor_paths, source_factor_vocab_paths, fillvalue=[None]) ]
-                return source_and_vocab_path, source_factor_and_vocab_path
-                
-
             source_and_vocab_path, source_factor_and_vocab_path = make_corpora_vocab_path(source=args.source,
                 source_vocab_paths=args.source_vocab,
                 source_factor_paths=args.source_factors,
@@ -796,6 +785,8 @@ def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
     args = params.parse_args()
+    if hasattr(args, 'tie_corpora_with_vocab'):
+        args.tie_corpora_with_vocab(args)
     train(args)
 
 
