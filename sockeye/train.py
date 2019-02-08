@@ -312,11 +312,6 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             target_vocab_path = data_info.target_vocab
 
         else:
-            source_and_vocab_path, source_factor_and_vocab_path = make_corpora_vocab_path(source=args.source,
-                source_vocab_paths=args.source_vocab,
-                source_factor_paths=args.source_factors,
-                source_factor_vocab_paths=args.source_factor_vocabs)
-
             # Load or create vocabs
             #source_factor_vocab_paths = [args.source_factor_vocabs[i] if i < len(args.source_factor_vocabs)
             #                             else None for i in range(len(args.source_factors))]
@@ -324,9 +319,9 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
 
             #target_vocab_path = args.target_vocab
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
-                source_and_vocab_path=source_and_vocab_path,
-                source_factor_and_vocab_paths=source_factor_and_vocab_path,
-                target_and_vocab_path=(args.target, args.target_vocab),
+                source_and_vocab_path=args.source_and_vocab_path,
+                source_factor_and_vocab_paths=args.source_factor_and_vocab_path,
+                target_and_vocab_path=args.target_and_vocab_path,
                 shared_vocab=shared_vocab,
                 num_words_source=num_words_source,
                 num_words_target=num_words_target,
@@ -343,10 +338,12 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                         "Number of source factor data (%d) differs from provided source factor dimensions (%d)" % (
                             len(args.source_factors), len(args.source_factors_num_embed)))
 
-        sources = [args.source] + args.source_factors
-        sources = [str(os.path.abspath(source)) for source in sources]
+        # sources: List[List[str]]
+        from itertools import zip_longest
+        sources = [ [source] + factors for source, factors in zip_longest(args.source, args.source_factors, fillvalue=[]) ]
+        sources = [ list(map(lambda s: str(os.path.abspath(s)), source)) for source in sources ]
 
-        check_condition(len(sources) == len(validation_sources),
+        check_condition(len(sources[0]) == len(validation_sources),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
                             len(source_vocabs), len(validation_sources)))
 
@@ -785,8 +782,7 @@ def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
     args = params.parse_args()
-    if hasattr(args, 'tie_corpora_with_vocab'):
-        args.tie_corpora_with_vocab(args)
+    arguments.tie_corpora_with_vocab(args)
     train(args)
 
 

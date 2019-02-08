@@ -246,6 +246,7 @@ def tie_corpora_with_vocab(args: argparse.Namespace):
 
     setattr(args, 'source_and_vocab_path', source_and_vocab_path)
     setattr(args, 'source_factor_and_vocab_path', source_factor_and_vocab_path)
+    setattr(args, 'target_and_vocab_path', (args.target, args.target_vocab))
 
 
 def add_average_args(params):
@@ -534,7 +535,7 @@ def add_vocab_args(params):
                         type=int,
                         default=None,
                         help='Pad vocabulary to a multiple of this integer. Default: %(default)s.')
-    params.set_defaults(tie_corpora_with_vocab=tie_corpora_with_vocab)
+    #params.set_defaults(tie_corpora_with_vocab=tie_corpora_with_vocab)
 
 
 def add_model_parameters(params):
