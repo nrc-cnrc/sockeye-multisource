@@ -453,10 +453,12 @@ class RawParallelDatasetLoader:
 
     def __init__(self,
                  buckets: List[Tuple[int, int]],
+                 num_factors: int,
                  eos_id: int,
                  pad_id: int,
                  dtype: str = 'float32') -> None:
         self.buckets = buckets
+        self.num_factors = num_factors
         self.eos_id = eos_id
         self.pad_id = pad_id
         self.dtype = dtype
@@ -468,9 +470,8 @@ class RawParallelDatasetLoader:
 
         assert len(num_samples_per_bucket) == len(self.buckets)
         num_sources = len(source_iterables)
-        num_factors = len(source_iterables)
 
-        data_source = [np.full((num_samples, num_sources, source_len[0], num_factors), self.pad_id, dtype=self.dtype)
+        data_source = [np.full((num_samples, num_sources, max(source_len), self.num_factors), self.pad_id, dtype=self.dtype)
                        for (*source_len, _), num_samples in zip(self.buckets, num_samples_per_bucket)]
         data_target = [np.full((num_samples, target_len), self.pad_id, dtype=self.dtype)
                        for (*_, target_len), num_samples in zip(self.buckets, num_samples_per_bucket)]
@@ -497,14 +498,14 @@ class RawParallelDatasetLoader:
             num_tokens_target += target_bucket
             num_pad_target += target_bucket - target_len
 
-            for i, source in enumerate(sources):
-                num_tokens_source += source_buckets[i]
-                num_pad_source += source_buckets[i] - len(source[0])
+            for i, factors in enumerate(sources):
+                num_tokens_source[i] += source_buckets[i]
+                num_pad_source[i] += source_buckets[i] - len(factors[0])
 
             sample_index = bucket_sample_index[buck_index]
-            for s, source in enumerate(sources):
-                source_len = len(source[0])
-                for f, factor in enumerate(source):
+            for s, factors in enumerate(sources):
+                source_len = len(factors[0])
+                for f, factor in enumerate(factors):
                     assert len(factor) == source_len
                     data_source[buck_index][sample_index, s, 0:source_len, f] = factor
             data_target[buck_index][sample_index, :target_len] = target
