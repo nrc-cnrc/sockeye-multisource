@@ -825,6 +825,7 @@ def get_training_data_iters(sources: List[List[str]],
     logger.info("===============================")
     logger.info("Creating training data iterator")
     logger.info("===============================")
+    from pudb import set_trace; set_trace()
     # Pass 1: get target/source length ratios.
     length_statistics = [ analyze_sequence_lengths(source,
             target,
@@ -840,7 +841,6 @@ def get_training_data_iters(sources: List[List[str]],
                         "Consider increasing %s" % C.TRAINING_ARG_MAX_SEQ_LEN)
 
     # define buckets
-    from pudb import set_trace; set_trace()
     buckets = define_multisource_parallel_buckets(
             max_seq_len_source,
             max_seq_len_target,
@@ -848,7 +848,7 @@ def get_training_data_iters(sources: List[List[str]],
             [ statistics.length_ratio_mean for statistics in length_statistics ]) if bucketing else [
         (max_seq_len_source,) * len(sources) + (max_seq_len_target,)]
 
-    sources_sentences, target_sentences = create_sequence_readers(sources, target, source_vocabs, target_vocab)
+    sources_sentences, target_sentences = create_multisource_sequence_readers(sources, target, source_vocabs, target_vocab)
 
     # Pass 2: Get data statistics and determine the number of data points for each bucket.
     data_statistics = get_data_statistics(sources_sentences, target_sentences, buckets,
@@ -1184,9 +1184,9 @@ def parallel_iter(source_iters: Sequence[Iterable[Optional[Any]]], target_iterab
     Checks that all iterables have the same number of elements.
     """
     num_skipped = 0
-    source_iters = [iter(s) for s in source_iters]
+    source_iters = [ map(iter, s) for s in source_iters ]
     target_iter = iter(target_iterable)
-    for sources, target in zip(zip(*source_iters), target_iter):
+    for sources, target in zip(zip(*(zip(*l) for l in source_iters)), target_iter):
         if any((s is None for s in sources)) or target is None:
             num_skipped += 1
             continue
