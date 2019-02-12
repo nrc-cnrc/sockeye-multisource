@@ -371,12 +371,14 @@ def add_validation_data_params(params):
     params.add_argument('--validation-source', '-vs',
                         required=True,
                         type=regular_file(),
+                        action='append',
                         help='Source side of validation data.')
     params.add_argument('--validation-source-factors', '-vsf',
                         required=False,
                         nargs='+',
                         type=regular_file(),
                         default=[],
+                        action='append',
                         help='File(s) containing additional token-parallel validation source side factors. '
                              'Default: %(default)s.')
     params.add_argument('--validation-target', '-vt',

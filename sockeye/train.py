@@ -224,6 +224,12 @@ def use_shared_vocab(args: argparse.Namespace) -> bool:
     return shared_vocab
 
 
+def merge_with_factors(main_factor: List[str],
+        other_factors: List[List[str]]) -> List[List[str]]:
+    return = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
+
+
+
 def create_data_iters_and_vocabs(args: argparse.Namespace,
                                  max_seq_len_source: int,
                                  max_seq_len_target: int,
@@ -252,9 +258,11 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
     batch_num_devices = 1 if args.use_cpu else sum(-di if di < 0 else 1 for di in args.device_ids)
     batch_by_words = args.batch_type == C.BATCH_TYPE_WORD
 
-    validation_sources = [args.validation_source] + args.validation_source_factors
-    validation_sources = [str(os.path.abspath(source)) for source in validation_sources]
+    validation_sources = [ [validation_source] + validation_source_factors
+            for validation_source, validation_source_factors in zip_longest(args.validation_source, args.validation_source_factors, fillvalue=[]) ]
+    validation_sources = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_sources]
     validation_target = str(os.path.abspath(args.validation_target))
+    from pudb import set_trace; set_trace()
 
     either_raw_or_prepared_error_msg = "Either specify a raw training corpus with %s and %s or a preprocessed corpus " \
                                        "with %s." % (C.TRAINING_ARG_SOURCE,
@@ -343,9 +351,9 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
 
         # sources: List[List[str]]
         sources = [ [source] + factors for source, factors in zip_longest(args.source, args.source_factors, fillvalue=[]) ]
-        sources = [ list(map(lambda s: str(os.path.abspath(s)), source)) for source in sources ]
+        sources = [ [ str(os.path.abspath(s)) for s in source ] for source in sources ]
 
-        check_condition(len(sources[0]) == len(validation_sources),
+        check_condition(all(len(sources[0]) == len(validation_source) for validation_source in validation_sources),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
                             len(source_vocabs), len(validation_sources)))
 
