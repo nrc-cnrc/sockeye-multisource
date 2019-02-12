@@ -226,7 +226,9 @@ def use_shared_vocab(args: argparse.Namespace) -> bool:
 
 def merge_with_factors(main_factor: List[str],
         other_factors: List[List[str]]) -> List[List[str]]:
-    return = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
+    sources_with_factors = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
+    assert all(len(sources_with_factors[0]) == len(factors) for factors in sources_with_factors)
+    return sources_with_factors
 
 
 
@@ -258,11 +260,9 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
     batch_num_devices = 1 if args.use_cpu else sum(-di if di < 0 else 1 for di in args.device_ids)
     batch_by_words = args.batch_type == C.BATCH_TYPE_WORD
 
-    validation_sources = [ [validation_source] + validation_source_factors
-            for validation_source, validation_source_factors in zip_longest(args.validation_source, args.validation_source_factors, fillvalue=[]) ]
+    validation_sources = merge_with_factors(args.validation_source, args.validation_source_factors)
     validation_sources = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_sources]
-    validation_target = str(os.path.abspath(args.validation_target))
-    from pudb import set_trace; set_trace()
+    validation_target  = str(os.path.abspath(args.validation_target))
 
     either_raw_or_prepared_error_msg = "Either specify a raw training corpus with %s and %s or a preprocessed corpus " \
                                        "with %s." % (C.TRAINING_ARG_SOURCE,
@@ -324,10 +324,8 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             #source_factor_vocab_paths = [args.source_factor_vocabs[i] if i < len(args.source_factor_vocabs)
             #                             else None for i in range(len(args.source_factors))]
             #source_vocab_paths = [args.source_vocab] + source_factor_vocab_paths
-            source_vocab_paths = [ [source_vocab] + factor_vocab
-                    for source_vocab, factor_vocab in zip_longest(args.source_vocab, args.source_factor_vocabs, fillvalue=[]) ],
-
-            target_vocab_path = args.target_vocab
+            source_vocab_paths = merge_with_factors(args.source_vocab, args.source_factor_vocabs)
+            target_vocab_path  = args.target_vocab
 
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
                 source_and_vocab_path=args.source_and_vocab_path,
@@ -350,7 +348,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                             len(args.source_factors), len(args.source_factors_num_embed)))
 
         # sources: List[List[str]]
-        sources = [ [source] + factors for source, factors in zip_longest(args.source, args.source_factors, fillvalue=[]) ]
+        sources = merge_with_factors(args.source, args.source_factors)
         sources = [ [ str(os.path.abspath(s)) for s in source ] for source in sources ]
 
         check_condition(all(len(sources[0]) == len(validation_source) for validation_source in validation_sources),

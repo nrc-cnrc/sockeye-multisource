@@ -59,7 +59,11 @@ def define_multisource_parallel_buckets(max_seq_len_source: int,
     # TODO: this is not quite respecting the max_seq_len_source &
     # max_seq_len_target, we need something better here.
     target_buckets = define_buckets(max_seq_len_target, step=bucket_width)
-    buckets = [ tuple([int(round(size * ratio)) for ratio in length_ratios]) + (size,) for size in target_buckets ]
+    buckets = [ 
+            tuple([
+                max(2, int(round(size / ratio)))
+                for ratio in length_ratios]) + (size,)
+            for size in target_buckets ]
 
     assert all(len(bucket) == len(length_ratios)+1 for bucket in buckets)
 
