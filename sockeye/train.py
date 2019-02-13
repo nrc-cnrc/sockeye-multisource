@@ -604,7 +604,7 @@ def check_encoder_decoder_args(args) -> None:
 
 
 def create_model_config(args: argparse.Namespace,
-                        source_vocab_sizes: List[int],
+                        source_vocab_sizes: List[List[int]],
                         target_vocab_size: int,
                         max_seq_len_source: int,
                         max_seq_len_target: int,
@@ -622,7 +622,12 @@ def create_model_config(args: argparse.Namespace,
     """
     num_embed_source, num_embed_target = args.num_embed
     embed_dropout_source, embed_dropout_target = args.embed_dropout
-    source_vocab_size, *source_factor_vocab_sizes = source_vocab_sizes
+    source_vocab_size = []
+    source_factor_vocab_sizes = []
+    for sizes in source_vocab_sizes:
+        size, *factor_sizes = sizes
+        source_vocab_size.append(size)
+        source_factor_vocab_sizes.append(factor_sizes)
 
     check_encoder_decoder_args(args)
 
@@ -648,8 +653,8 @@ def create_model_config(args: argparse.Namespace,
     config_decoder = create_decoder_config(args, encoder_num_hidden, max_seq_len_source, max_seq_len_target)
 
     source_factor_configs = None
-    if len(source_vocab_sizes) > 1:
-        source_factor_configs = [encoder.FactorConfig(size, dim) for size, dim in zip(source_factor_vocab_sizes,
+    if len(source_vocab_sizes[0]) > 1:
+        source_factor_configs = [encoder.FactorConfig(size, dim) for size, dim in zip(source_factor_vocab_sizes[0],
                                                                                       args.source_factors_num_embed)]
 
     config_embed_source = encoder.EmbeddingConfig(vocab_size=source_vocab_size,
@@ -860,11 +865,14 @@ def train(args: argparse.Namespace) -> training.TrainState:
             vocab.save_source_vocabs(source_vocabs, output_folder)
             vocab.save_target_vocab(target_vocab, output_folder)
 
-        source_vocab_sizes = [len(v) for v in source_vocabs]
+        source_vocab_sizes = [ [len(v) for v in factor_vocabs] for factor_vocabs in  source_vocabs ]
         target_vocab_size = len(target_vocab)
-        logger.info('Vocabulary sizes: source=[%s] target=%d',
-                    '|'.join([str(size) for size in source_vocab_sizes]),
-                    target_vocab_size)
+        logger.info('Vocabulary sizes: %s target=%d',
+                ' '.join('source({:d})=[{}]'.format(
+                    i,
+                    '|'.join(str(size) for size in factor_vocab_sizes))
+                        for i, factor_vocab_sizes in enumerate(source_vocab_sizes)),
+                target_vocab_size)
 
         model_config = create_model_config(args=args,
                                            source_vocab_sizes=source_vocab_sizes, target_vocab_size=target_vocab_size,
@@ -872,6 +880,7 @@ def train(args: argparse.Namespace) -> training.TrainState:
                                            config_data=config_data)
         model_config.freeze()
 
+        from pudb import set_trace; set_trace()
         training_model = create_training_model(config=model_config,
                                                context=context,
                                                output_dir=output_folder,
@@ -928,5 +937,4 @@ def train(args: argparse.Namespace) -> training.TrainState:
         return training_state
 
 if __name__ == "__main__":
-    #from pudb import set_trace; set_trace()
     main()

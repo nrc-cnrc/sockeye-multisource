@@ -157,15 +157,16 @@ def vocab_from_json(path: str, encoding: str = C.VOCAB_ENCODING) -> Vocab:
         return vocab
 
 
-def save_source_vocabs(source_vocabs: List[Vocab], folder: str):
+def save_source_vocabs(source_vocabs: List[List[Vocab]], folder: str):
     """
     Saves source vocabularies (primary surface form vocabulary) and optional factor vocabularies to folder.
 
     :param source_vocabs: List of source vocabularies.
     :param folder: Destination folder.
     """
-    for i, vocab in enumerate(source_vocabs):
-        vocab_to_json(vocab, os.path.join(folder, C.VOCAB_SRC_NAME % i))
+    for i, factor_vocabs in enumerate(source_vocabs):
+        for j, vocab in enumerate(factor_vocabs):
+            vocab_to_json(vocab, os.path.join(folder, C.VOCAB_SRC_NAME % (i, j)))
 
 
 def save_target_vocab(target_vocab: Vocab, folder: str):

@@ -527,10 +527,10 @@ class RawParallelDatasetLoader:
             data_label[i]  = mx.nd.array(data_label[i], dtype=self.dtype)
 
         if all(num > 0 for num in num_tokens_source + [num_tokens_target]):
-            logger.info("Created bucketed parallel data set. Introduced padding: {} target={:0.1f}%".format(
+            logger.info("Created bucketed parallel data set. Introduced padding: %s target=%0.1f%%",
                     ' '.join('source({s})={:0.1f}%'.format(num_pad/num_tokens*100, s=s)
                         for s, (num_pad, num_tokens) in enumerate(zip(num_pad_source, num_tokens_source))),
-                    num_pad_target / num_tokens_target * 100))
+                    num_pad_target / num_tokens_target * 100)
 
         return ParallelDataSet(data_source, data_target, data_label)
 
@@ -713,7 +713,7 @@ def get_validation_data_iter(data_loader: RawParallelDatasetLoader,
         statistics.log(bucket_batch_sizes)
 
     validation_data = data_loader.load(validation_sources_sentences, validation_target_sentences,
-                                       validation_data_statistics.num_sents_per_bucket).fill_up(bucket_batch_sizes,
+                                       validation_data_statistics[0].num_sents_per_bucket).fill_up(bucket_batch_sizes,
                                                                                                 fill_up)
 
     return ParallelSampleIter(data=validation_data,
@@ -857,7 +857,6 @@ def get_training_data_iters(sources: List[List[str]],
     logger.info("===============================")
     logger.info("Creating training data iterator")
     logger.info("===============================")
-    from pudb import set_trace; set_trace()
     # Pass 1: get target/source length ratios.
     #length_statistics = [ analyze_sequence_lengths(source,
     #        target,
