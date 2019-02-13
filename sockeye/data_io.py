@@ -527,10 +527,10 @@ class RawParallelDatasetLoader:
             data_label[i]  = mx.nd.array(data_label[i], dtype=self.dtype)
 
         if all(num > 0 for num in num_tokens_source + [num_tokens_target]):
-            logger.info("Created bucketed parallel data set. Introduced padding: {} target=%.1f%%)",
-                    ' '.join('source({s})=%.1f%%'.format(num_pad/num_tokens*100, s=s)
+            logger.info("Created bucketed parallel data set. Introduced padding: {} target={:0.1f}%".format(
+                    ' '.join('source({s})={:0.1f}%'.format(num_pad/num_tokens*100, s=s)
                         for s, (num_pad, num_tokens) in enumerate(zip(num_pad_source, num_tokens_source))),
-                    num_pad_target / num_tokens_target * 100)
+                    num_pad_target / num_tokens_target * 100))
 
         return ParallelDataSet(data_source, data_target, data_label)
 
@@ -1292,7 +1292,7 @@ def get_parallel_bucket(buckets: List[Tuple[int, int]],
     """
     lengths = length_source + [length_target]
     for j, bucket in enumerate(buckets):
-        assert len(lengths) == len(bucket)
+        assert len(lengths) == len(bucket), '{} {}'.format(len(lengths), len(bucket))
         if all(bkt >= length for bkt, length in zip(bucket, lengths)):
             return j, bucket
     return None, None

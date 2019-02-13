@@ -804,6 +804,17 @@ def train(args: argparse.Namespace) -> training.TrainState:
 
     utils.seed_rngs(args.seed)
 
+    check_condition(len(args.source) == len(args.validation_source),
+            "You should have has many validation sources as training sources.")
+    if len(args.source_factors) > 0:
+        check_condition(len(args.source_factors) == len(args.source), "You need to provide factors for all your source.")
+        check_condition(all(len(args.source_factors[0]) == len(factors) for factors in args.source_factors), 
+                "You need to provide the same number of factors for all your sources")
+        check_condition(len(args.validation_source_factors) == len(args.validation_source),
+                "You need to provide factors for all your validation source.")
+        check_condition(all(len(args.source_factors[0]) == len(factors) for factors in args.validation_source_factors), 
+                "You need to provide the same number of factors for all your validation sources")
+
     check_arg_compatibility(args)
     output_folder = os.path.abspath(args.output)
     resume_training = check_resume(args, output_folder)
