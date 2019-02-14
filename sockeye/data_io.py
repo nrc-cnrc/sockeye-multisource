@@ -926,7 +926,7 @@ def get_training_data_iters(sources: List[List[str]],
                                     buckets=buckets,
                                     batch_size=batch_size,
                                     bucket_batch_sizes=bucket_batch_sizes,
-                                    num_factors=len(sources),
+                                    num_factors=len(sources[0]),
                                     permute=permute)
 
     validation_iter = None
