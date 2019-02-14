@@ -648,25 +648,33 @@ def create_model_config(args: argparse.Namespace,
                                                            num_highway_layers=args.conv_embed_num_highway_layers,
                                                            dropout=args.conv_embed_dropout)
 
-    config_encoder, encoder_num_hidden = create_encoder_config(args, max_seq_len_source, max_seq_len_target,
-                                                               config_conv)
+    from pudb import set_trace; set_trace()
+    config_encoder = []
+    for _ in source_vocab_sizes:
+        config, encoder_num_hidden = create_encoder_config(args, max_seq_len_source, max_seq_len_target,
+                                                           config_conv)
+        config_encoder.append(config)
     config_decoder = create_decoder_config(args, encoder_num_hidden, max_seq_len_source, max_seq_len_target)
 
-    source_factor_configs = None
-    if len(source_vocab_sizes[0]) > 1:
-        source_factor_configs = [encoder.FactorConfig(size, dim) for size, dim in zip(source_factor_vocab_sizes[0],
-                                                                                      args.source_factors_num_embed)]
+    # TODO: Sam there was a patch done here to handle combining embeddings (9c5ed6e30fa0421044b2feecb9138f708a555c5a).
+    config_embed_source = []
+    for sizes in source_vocab_sizes:
+        size, *factor_sizes = sizes
+        source_factor_configs = None
+        if len(factor_sizes) > 1:
+            source_factor_configs = [ encoder.FactorConfig(size, dim)
+                    for size, dim in zip(sizes, args.source_factors_num_embed) ]
 
-    config_embed_source = encoder.EmbeddingConfig(vocab_size=source_vocab_size,
-                                                  num_embed=num_embed_source,
-                                                  dropout=embed_dropout_source,
-                                                  factor_configs=source_factor_configs,
-                                                  source_factors_combine=args.source_factors_combine)
+        config_embed_source.append(encoder.EmbeddingConfig(vocab_size=size,
+                                                      num_embed=num_embed_source,
+                                                      dropout=embed_dropout_source,
+                                                      factor_configs=source_factor_configs,
+                                                      source_factors_combine=args.source_factors_combine)) 
 
     config_embed_target = encoder.EmbeddingConfig(vocab_size=target_vocab_size,
                                                   num_embed=num_embed_target,
                                                   dropout=embed_dropout_target)
-
+ 
     config_loss = loss.LossConfig(name=args.loss,
                                   vocab_size=target_vocab_size,
                                   normalization_type=args.loss_normalization_type,
@@ -684,6 +692,8 @@ def create_model_config(args: argparse.Namespace,
                                      weight_tying_type=args.weight_tying_type if args.weight_tying else None,
                                      weight_normalization=args.weight_normalization,
                                      lhuc=args.lhuc is not None)
+    # Debugging
+    model_config.save('model_config.yml')
     return model_config
 
 

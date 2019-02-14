@@ -104,18 +104,21 @@ class SockeyeModel:
         logger.info("%s", self.config)
 
         # encoder & decoder first (to know the decoder depth)
-        self.encoder = encoder.get_encoder(self.config.config_encoder, prefix=self.prefix)
+        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoder ]
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
 
         # source & target embeddings
         embed_weight_source, embed_weight_target, out_weight_target = self._get_embed_weights(self.prefix)
-        if isinstance(self.config.config_embed_source, encoder.PassThroughEmbeddingConfig):
-            self.embedding_source = encoder.PassThroughEmbedding(self.config.config_embed_source)  # type: encoder.Encoder
-        else:
-            self.embedding_source = encoder.Embedding(self.config.config_embed_source,
-                                                      prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX,
-                                                      embed_weight=embed_weight_source,
-                                                      is_source=True)  # type: encoder.Encoder
+        assert len(embed_weight_source) == len(self.config.config_embed_source)
+        self.embedding_source = []
+        for weights, config in zip(embed_weight_source, self.config.config_embed_source):
+            if isinstance(self.config.config_embed_source, encoder.PassThroughEmbeddingConfig):
+                self.embedding_source.append(encoder.PassThroughEmbedding(config))  # type: encoder.Encoder
+            else:
+                self.embedding_source = encoder.Embedding(config,
+                                                          prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX,
+                                                          embed_weight=weights,
+                                                          is_source=True)  # type: encoder.Encoder
 
         self.embedding_target = encoder.Embedding(self.config.config_embed_target,
                                                   prefix=self.prefix + C.TARGET_EMBEDDING_PREFIX,
@@ -192,7 +195,7 @@ class SockeyeModel:
         with open(fname, "w") as out:
             out.write(__version__)
 
-    def _get_embed_weights(self, prefix: str) -> Tuple[mx.sym.Symbol, mx.sym.Symbol, mx.sym.Symbol]:
+    def _get_embed_weights(self, prefix: str) -> Tuple[List[mx.sym.Symbol], mx.sym.Symbol, mx.sym.Symbol]:
         """
         Returns embedding parameters for source and target.
         When source and target embeddings are shared, they are created here and passed in to each side,
@@ -201,9 +204,9 @@ class SockeyeModel:
         :param prefix: Prefix.
         :return: Tuple of source and target parameter symbols.
         """
-        w_embed_source = mx.sym.Variable(prefix + C.SOURCE_EMBEDDING_PREFIX + "weight",
-                                         shape=(self.config.config_embed_source.vocab_size,
-                                                self.config.config_embed_source.num_embed))
+        w_embed_source = [ mx.sym.Variable(prefix + C.SOURCE_EMBEDDING_PREFIX + "weight%d" % i,
+                                         shape=(config.vocab_size, config.num_embed)) 
+                            for i, config in enumerate(self.config.config_embed_source) ]
         w_embed_target = mx.sym.Variable(prefix + C.TARGET_EMBEDDING_PREFIX + "weight",
                                          shape=(self.config.config_embed_target.vocab_size,
                                                 self.config.config_embed_target.num_embed))
@@ -215,12 +218,16 @@ class SockeyeModel:
             if C.WEIGHT_TYING_SRC in self.config.weight_tying_type \
                     and C.WEIGHT_TYING_TRG in self.config.weight_tying_type:
                 logger.info("Tying the source and target embeddings.")
+                # TODO: Sam Implement weight tying with multiple sources.
+                assert False, "Not Yet Implemented."
                 w_embed_source = w_embed_target = mx.sym.Variable(prefix + C.SHARED_EMBEDDING_PREFIX + "weight",
                                                                   shape=(self.config.config_embed_source.vocab_size,
                                                                          self.config.config_embed_source.num_embed))
 
             if C.WEIGHT_TYING_SOFTMAX in self.config.weight_tying_type:
                 logger.info("Tying the target embeddings and output layer parameters.")
+                # TODO: Sam Implement weight tying with multiple sources.
+                assert False, "Not Yet Implemented."
                 utils.check_condition(self.config.config_embed_target.num_embed == self.decoder.get_num_hidden(),
                                       "Weight tying requires target embedding size and decoder hidden size " +
                                       "to be equal: %d vs. %d" % (self.config.config_embed_target.num_embed,
@@ -229,7 +236,7 @@ class SockeyeModel:
 
         self._embed_weight_source_name = None
         if w_embed_source is not None:
-            self._embed_weight_source_name = w_embed_source.name
+            self._embed_weight_source_name = [ weights.name for weights in w_embed_source ]
         self._embed_weight_target_name = w_embed_target.name
         self._out_weight_target_name = w_out_target.name
         return w_embed_source, w_embed_target, w_out_target
