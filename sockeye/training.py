@@ -68,6 +68,7 @@ class TrainingModel(model.SockeyeModel):
                  bucketing: bool,
                  gradient_compression_params: Optional[Dict[str, Any]] = None,
                  fixed_param_names: Optional[List[str]] = None) -> None:
+        from pudb import set_trace; set_trace()
         super().__init__(config)
         self.context = context
         self.output_dir = output_dir
@@ -85,9 +86,12 @@ class TrainingModel(model.SockeyeModel):
         Initializes model components, creates training symbol and module, and binds it.
         """
         source = mx.sym.Variable(C.SOURCE_NAME)
-        source_words = source.split(num_outputs=self.config.config_embed_source.num_factors,
-                                    axis=2, squeeze_axis=True)[0]
-        source_length = utils.compute_lengths(source_words)
+        # (num_samples, num_sources, max(source_len), self.num_factors)
+        multisource = source.split(num_outputs=len(self.config.config_embed_source),
+                                    axis=1, squeeze_axis=True)
+        multisource_words = source.split(num_outputs=self.config.config_embed_source[0].num_factors,
+                                    axis=3, squeeze_axis=True)[0]
+        multisource_length = utils.compute_lengths(multisource_words)
         target = mx.sym.Variable(C.TARGET_NAME)
         target_length = utils.compute_lengths(target)
         labels = mx.sym.reshape(data=mx.sym.Variable(C.TARGET_LABEL_NAME), shape=(-1,))
@@ -115,7 +119,7 @@ class TrainingModel(model.SockeyeModel):
             # source embedding
             (source_embed,
              source_embed_length,
-             source_embed_seq_len) = self.embedding_source.encode(source, source_length, source_seq_len)
+             source_embed_seq_len) = self.embedding_source.encode(multisource, multisource_length, source_seq_len)
 
             # target embedding
             (target_embed,

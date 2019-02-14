@@ -648,7 +648,6 @@ def create_model_config(args: argparse.Namespace,
                                                            num_highway_layers=args.conv_embed_num_highway_layers,
                                                            dropout=args.conv_embed_dropout)
 
-    from pudb import set_trace; set_trace()
     config_encoder = []
     for _ in source_vocab_sizes:
         config, encoder_num_hidden = create_encoder_config(args, max_seq_len_source, max_seq_len_target,
@@ -890,7 +889,6 @@ def train(args: argparse.Namespace) -> training.TrainState:
                                            config_data=config_data)
         model_config.freeze()
 
-        from pudb import set_trace; set_trace()
         training_model = create_training_model(config=model_config,
                                                context=context,
                                                output_dir=output_folder,

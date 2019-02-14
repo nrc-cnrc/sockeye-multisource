@@ -919,7 +919,7 @@ def get_training_data_iters(sources: List[List[str]],
     config_data = DataConfig(data_statistics=data_statistics,
                              max_seq_len_source=max_seq_len_source,
                              max_seq_len_target=max_seq_len_target,
-                             num_source_factors=len(sources),
+                             num_source_factors=len(sources[0]),
                              source_with_eos=True)
 
     train_iter = ParallelSampleIter(data=training_data,
