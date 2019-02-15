@@ -85,13 +85,21 @@ class TrainingModel(model.SockeyeModel):
         """
         Initializes model components, creates training symbol and module, and binds it.
         """
+        num_sources = len(self.config.config_embed_source)
+        num_factors = self.config.config_embed_source[0].num_factors
+
         source = mx.sym.Variable(C.SOURCE_NAME)
-        # (num_samples, num_sources, max(source_len), self.num_factors)
-        multisource = source.split(num_outputs=len(self.config.config_embed_source),
-                                    axis=1, squeeze_axis=True)
-        multisource_words = source.split(num_outputs=self.config.config_embed_source[0].num_factors,
+        # source => (num_samples, num_sources, max(source_len), num_factors)
+        multisource = source.split(num_outputs=num_sources,
+                                   axis=1, squeeze_axis=True)
+        # multisource => [(num_samples, max(source_len), num_factors) X num_sources]
+        multisource_words = source.split(num_outputs=num_factors,
                                     axis=3, squeeze_axis=True)[0]
+        # multisource_words => (num_samples, num_sources, max(source_len))
         multisource_length = utils.compute_lengths(multisource_words)
+        # multisource_length => (num_samples, num_sources)
+        multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True)
+        # multisource_length => [(num_samples) x num_sources]
         target = mx.sym.Variable(C.TARGET_NAME)
         target_length = utils.compute_lengths(target)
         labels = mx.sym.reshape(data=mx.sym.Variable(C.TARGET_LABEL_NAME), shape=(-1,))
@@ -114,12 +122,15 @@ class TrainingModel(model.SockeyeModel):
             Returns a (grouped) loss symbol given source & target input lengths.
             Also returns data and label names for the BucketingModule.
             """
-            source_seq_len, target_seq_len = seq_lens
+            from pudb import set_trace; set_trace()
+            *source_seq_len, target_seq_len = seq_lens
 
             # source embedding
-            (source_embed,
-             source_embed_length,
-             source_embed_seq_len) = self.embedding_source.encode(multisource, multisource_length, source_seq_len)
+            # (source_embed, source_embed_length, source_embed_seq_len)
+            assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(source_seq_len)
+            source_embeds = [
+               embedder.encode(source, source_length, source_seq_len)
+               for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, source_seq_len) ]
 
             # target embedding
             (target_embed,
@@ -128,11 +139,10 @@ class TrainingModel(model.SockeyeModel):
 
             # encoder
             # source_encoded: (batch_size, source_encoded_length, encoder_depth)
-            (source_encoded,
-             source_encoded_length,
-             source_encoded_seq_len) = self.encoder.encode(source_embed,
-                                                           source_embed_length,
-                                                           source_embed_seq_len)
+            # (source_encoded, source_encoded_length, source_encoded_seq_len)
+            source_encoded = [
+                    self.encoder.encode(source_embed, source_embed_length, source_embed_seq_len)
+                    for encoder, (source_embed, source_embed_length, source_embed_seq_len) in zip(self.encoder, source_embeds) ]
 
             # decoder
             # target_decoded: (batch-size, target_len, decoder_depth)

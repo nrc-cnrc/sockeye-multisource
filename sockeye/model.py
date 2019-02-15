@@ -235,6 +235,7 @@ class SockeyeModel:
                 w_out_target = w_embed_target
 
         self._embed_weight_source_name = None
+        # TODO: Sam how can w_embed_source be None?
         if w_embed_source is not None:
             self._embed_weight_source_name = [ weights.name for weights in w_embed_source ]
         self._embed_weight_target_name = w_embed_target.name

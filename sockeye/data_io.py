@@ -468,13 +468,16 @@ class RawParallelDatasetLoader:
         self.dtype = dtype
 
     def load(self,
-             source_iterables: Sequence[Iterable],
+             multisource_iterables: Sequence[Iterable],
              target_iterable: Iterable,
              num_samples_per_bucket: List[int]) -> 'ParallelDataSet':
 
         assert len(num_samples_per_bucket) == len(self.buckets)
-        num_sources = len(source_iterables)
+        num_sources = len(multisource_iterables)
 
+        # TODO: since we process per source first, it would make more sense to have:
+        # (num_sources, num_samples, max(source_len), num_factors)
+        # This would probably screw up ParallelSampleIter.next() which works with num_samples.
         data_source = [np.full((num_samples, num_sources, max(source_len), self.num_factors), self.pad_id, dtype=self.dtype)
                        for (*source_len, _), num_samples in zip(self.buckets, num_samples_per_bucket)]
         data_target = [np.full((num_samples, target_len), self.pad_id, dtype=self.dtype)
@@ -485,13 +488,13 @@ class RawParallelDatasetLoader:
         bucket_sample_index = [0 for _ in self.buckets]
 
         # track amount of padding introduced through bucketing
-        num_tokens_source = [ 0 for _ in range(len(source_iterables)) ]
+        num_tokens_source = [ 0 for _ in range(len(multisource_iterables)) ]
         num_tokens_target = 0
-        num_pad_source = [ 0 for _ in range(len(source_iterables)) ]
+        num_pad_source = [ 0 for _ in range(len(multisource_iterables)) ]
         num_pad_target = 0
 
         # Bucket sentences as padded np arrays
-        for sources, target in parallel_iter(source_iterables, target_iterable):
+        for sources, target in parallel_iter(multisource_iterables, target_iterable):
             target_len = len(target)
             buck_index, buck = get_parallel_bucket(self.buckets, [len(source[0]) for source in sources ], target_len)
             if buck is None:
@@ -810,7 +813,7 @@ def get_prepared_data_iters(prepared_data_dir: str,
     return train_iter, validation_iter, config_data, source_vocabs, target_vocab
 
 
-def get_training_data_iters(sources: List[List[str]],
+def get_training_data_iters(multisource_with_factors: List[List[str]],
                             target: str,
                             validation_sources: Optional[List[str]],
                             validation_target: Optional[str],
@@ -834,7 +837,7 @@ def get_training_data_iters(sources: List[List[str]],
     """
     Returns data iterators for training and validation data.
 
-    :param sources: Path to source training data (with optional factor data paths).
+    :param multisource_with_factors: Path to source training data (with optional factor data paths).
     :param target: Path to target training data.
     :param validation_sources: Path to source validation data (with optional factor data paths).
     :param validation_target: Path to target validation data.
@@ -857,6 +860,9 @@ def get_training_data_iters(sources: List[List[str]],
     logger.info("===============================")
     logger.info("Creating training data iterator")
     logger.info("===============================")
+    num_sources = len(multisource_with_factors)
+    num_factors = len(multisource_with_factors[0])
+
     # Pass 1: get target/source length ratios.
     #length_statistics = [ analyze_sequence_lengths(source,
     #        target,
@@ -864,8 +870,8 @@ def get_training_data_iters(sources: List[List[str]],
     #        target_vocab,
     #        max_seq_len_source,
     #        max_seq_len_target)
-    #        for source, source_vocab in zip(sources, source_vocabs) ]
-    length_statistics = analyze_sequence_lengths(sources, target, source_vocabs, target_vocab, max_seq_len_source, max_seq_len_target)
+    #        for source, source_vocab in zip(multisource_with_factors, source_vocabs) ]
+    length_statistics = analyze_sequence_lengths(multisource_with_factors, target, source_vocabs, target_vocab, max_seq_len_source, max_seq_len_target)
 
     if not allow_empty:
         check_condition(all(statistics.num_sents > 0 for statistics in length_statistics),
@@ -878,9 +884,9 @@ def get_training_data_iters(sources: List[List[str]],
             max_seq_len_target,
             bucket_width,
             [ statistics.length_ratio_mean for statistics in length_statistics ]) if bucketing else [
-        (max_seq_len_source,) * len(sources) + (max_seq_len_target,)]
+        (max_seq_len_source,) * num_sources + (max_seq_len_target,)]
 
-    sources_sentences, target_sentences = create_multisource_sequence_readers(sources, target, source_vocabs, target_vocab)
+    sources_sentences, target_sentences = create_multisource_sequence_readers(multisource_with_factors, target, source_vocabs, target_vocab)
 
     # Pass 2: Get data statistics and determine the number of data points for each bucket.
     data_statistics = get_data_statistics(sources_sentences,
@@ -902,14 +908,14 @@ def get_training_data_iters(sources: List[List[str]],
 
     # Pass 3: Load the data into memory and return the iterator.
     data_loader = RawParallelDatasetLoader(buckets=buckets,
-                                           num_factors=len(sources[0]),
+                                           num_factors=num_factors,
                                            eos_id=target_vocab[C.EOS_SYMBOL],
                                            pad_id=C.PAD_ID)
 
     training_data = data_loader.load(sources_sentences, target_sentences,
                                      data_statistics[0].num_sents_per_bucket).fill_up(bucket_batch_sizes, fill_up)
 
-    data_info = DataInfo(sources=sources,
+    data_info = DataInfo(sources=multisource_with_factors,
                          target=target,
                          source_vocabs=source_vocab_paths,
                          target_vocab=target_vocab_path,
@@ -919,14 +925,14 @@ def get_training_data_iters(sources: List[List[str]],
     config_data = DataConfig(data_statistics=data_statistics,
                              max_seq_len_source=max_seq_len_source,
                              max_seq_len_target=max_seq_len_target,
-                             num_source_factors=len(sources[0]),
+                             num_source_factors=num_factors,
                              source_with_eos=True)
 
     train_iter = ParallelSampleIter(data=training_data,
                                     buckets=buckets,
                                     batch_size=batch_size,
                                     bucket_batch_sizes=bucket_batch_sizes,
-                                    num_factors=len(sources[0]),
+                                    num_factors=num_factors,
                                     permute=permute)
 
     validation_iter = None
@@ -1342,6 +1348,7 @@ class ParallelDataSet(Sized):
         """
         Saves the dataset to a binary .npy file.
         """
+        # TODO: Sam This won't work with multisource.
         mx.nd.save(fname, self.source + self.target + self.label)
 
     @staticmethod
@@ -1349,6 +1356,8 @@ class ParallelDataSet(Sized):
         """
         Loads a dataset from a binary .npy file.
         """
+        # TODO: This won't properly reload multisource since source, target &
+        # label is no longer 1/3.
         data = mx.nd.load(fname)
         n = len(data) // 3
         source = data[:n]

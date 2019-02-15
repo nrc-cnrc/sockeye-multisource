@@ -226,9 +226,11 @@ def use_shared_vocab(args: argparse.Namespace) -> bool:
 
 def merge_with_factors(main_factor: List[str],
         other_factors: List[List[str]]) -> List[List[str]]:
-    sources_with_factors = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
-    assert all(len(sources_with_factors[0]) == len(factors) for factors in sources_with_factors)
-    return sources_with_factors
+    """
+    """
+    multisource_with_factors = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
+    assert all(len(multisource_with_factors[0]) == len(factors) for factors in multisource_with_factors)
+    return multisource_with_factors
 
 
 
@@ -260,8 +262,8 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
     batch_num_devices = 1 if args.use_cpu else sum(-di if di < 0 else 1 for di in args.device_ids)
     batch_by_words = args.batch_type == C.BATCH_TYPE_WORD
 
-    validation_sources = merge_with_factors(args.validation_source, args.validation_source_factors)
-    validation_sources = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_sources]
+    validation_multisource = merge_with_factors(args.validation_source, args.validation_source_factors)
+    validation_multisource = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_multisource]
     validation_target  = str(os.path.abspath(args.validation_target))
 
     either_raw_or_prepared_error_msg = "Either specify a raw training corpus with %s and %s or a preprocessed corpus " \
@@ -276,7 +278,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                                   "To change it you need to rerun data preparation with a different vocabulary.")
         train_iter, validation_iter, data_config, source_vocabs, target_vocab = data_io.get_prepared_data_iters(
             prepared_data_dir=args.prepared_data,
-            validation_sources=validation_sources,
+            validation_sources=validation_multisource,
             validation_target=validation_target,
             shared_vocab=shared_vocab,
             batch_size=args.batch_size,
@@ -299,9 +301,9 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             utils.check_condition(vocab.are_identical(target_vocab, model_target_vocab),
                                   "Prepared data and resumed model target vocabs do not match.")
 
-        check_condition(data_config.num_source_factors == len(validation_sources),
+        check_condition(data_config.num_source_factors == len(validation_multisource),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
-                            data_config.num_source_factors, len(validation_sources)))
+                            data_config.num_source_factors, len(validation_multisource)))
 
         return train_iter, validation_iter, data_config, source_vocabs, target_vocab
 
@@ -347,18 +349,18 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                         "Number of source factor data (%d) differs from provided source factor dimensions (%d)" % (
                             len(args.source_factors), len(args.source_factors_num_embed)))
 
-        # sources: List[List[str]]
-        sources = merge_with_factors(args.source, args.source_factors)
-        sources = [ [ str(os.path.abspath(s)) for s in source ] for source in sources ]
+        # multisource_with_factors: List[List[str]]
+        multisource_with_factors = merge_with_factors(args.source, args.source_factors)
+        multisource_with_factors = [ [ str(os.path.abspath(s)) for s in source ] for source in multisource_with_factors ]
 
-        check_condition(all(len(sources[0]) == len(validation_source) for validation_source in validation_sources),
+        check_condition(all(len(multisource_with_factors[0]) == len(validation_source) for validation_source in validation_multisource),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
-                            len(source_vocabs), len(validation_sources)))
+                            len(source_vocabs), len(validation_multisource)))
 
         train_iter, validation_iter, config_data, data_info = data_io.get_training_data_iters(
-            sources=sources,
+            multisource_with_factors=multisource_with_factors,
             target=os.path.abspath(args.target),
-            validation_sources=validation_sources,
+            validation_sources=validation_multisource,
             validation_target=validation_target,
             source_vocabs=source_vocabs,
             target_vocab=target_vocab,
