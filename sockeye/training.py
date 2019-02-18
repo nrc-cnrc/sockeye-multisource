@@ -123,14 +123,14 @@ class TrainingModel(model.SockeyeModel):
             Also returns data and label names for the BucketingModule.
             """
             from pudb import set_trace; set_trace()
-            *source_seq_len, target_seq_len = seq_lens
+            *multisource_seq_len, target_seq_len = seq_lens
 
             # source embedding
             # (source_embed, source_embed_length, source_embed_seq_len)
-            assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(source_seq_len)
-            source_embeds = [
+            assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
+            multisource_embeds = [
                embedder.encode(source, source_length, seq_len)
-               for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, source_seq_len) ]
+               for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
 
             # target embedding
             (target_embed,
@@ -140,17 +140,18 @@ class TrainingModel(model.SockeyeModel):
             # encoder
             # source_encoded: (batch_size, source_encoded_length, encoder_depth)
             # [(source_encoded, source_encoded_length, source_encoded_seq_len)]
-            source_encoded = [
+            multisource_encoded = [
                     encoder.encode(*encoder_args)
-                    for encoder, encoder_args in zip(self.encoder, source_embeds) ]
+                    for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
+
+            # TODO: Sam what length should I be using here since not all sources have the same length?
+            source_encoded_length = multisource_encoded[0][1]
+            source_encoded_seq_len = multisource_encoded[0][2]
 
             # TODO: Sam, merge the hidden units of all sources.
             # Note factors have already been merged.
-            multisource_embeds = mx.sym.concat(*[source[0] for source in source_encoded], dim=2, name='multisource_combined_embeddings')
-            source_encoded = self.encoder2decoder(multisource_embeds)
-            # TODO: Sam what length should I be using here since not all sources have the same length?
-            source_encoded_length = source_encoded[0][1]
-            source_encoded_seq_len = source_encoded[0][2]
+            multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
+            source_encoded = self.encoder2decoder(multisource_encoded_concat)
 
             # decoder
             # target_decoded: (batch-size, target_len, decoder_depth)
@@ -171,6 +172,8 @@ class TrainingModel(model.SockeyeModel):
 
             return mx.sym.Group(loss_output), data_names, label_names
 
+
+        from pudb import set_trace; set_trace()
         if self.config.lhuc:
             arguments = sym_gen(default_bucket_key)[0].list_arguments()
             fixed_param_names = [a for a in arguments if not a.endswith(C.LHUC_NAME)]
