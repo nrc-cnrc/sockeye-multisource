@@ -408,14 +408,14 @@ class Embedding(Encoder):
                                                                                     self.config.factor_configs,
                                                                                     self.embed_factor_weights)):
                     factor_embeddings.append(mx.sym.Embedding(data=factor_data,
-                                                              input_dim=factor_config.vocab_size,
                                                               weight=factor_weight,
+                                                              input_dim=factor_config.vocab_size,
                                                               output_dim=factor_config.num_embed,
                                                               name=self.prefix + "factor%d_embed" % i))
 
         embedding = mx.sym.Embedding(data=data,
-                                     input_dim=self.config.vocab_size,
                                      weight=self.embed_weight,
+                                     input_dim=self.config.vocab_size,
                                      output_dim=self.config.num_embed,
                                      name=self.prefix + "embed")
 

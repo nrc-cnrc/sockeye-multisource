@@ -68,7 +68,7 @@ class TrainingModel(model.SockeyeModel):
                  bucketing: bool,
                  gradient_compression_params: Optional[Dict[str, Any]] = None,
                  fixed_param_names: Optional[List[str]] = None) -> None:
-        from pudb import set_trace; set_trace()
+        #from pudb import set_trace; set_trace()
         super().__init__(config)
         self.context = context
         self.output_dir = output_dir
@@ -91,10 +91,10 @@ class TrainingModel(model.SockeyeModel):
         source = mx.sym.Variable(C.SOURCE_NAME)
         # source => (num_samples, num_sources, max(source_len), num_factors)
         multisource = source.split(num_outputs=num_sources,
-                                   axis=1, squeeze_axis=True)
+                                   axis=1, squeeze_axis=True, name='multisource_batches')
         # multisource => [(num_samples, max(source_len), num_factors) X num_sources]
         multisource_words = source.split(num_outputs=num_factors,
-                                    axis=3, squeeze_axis=True)[0]
+                                    axis=3, squeeze_axis=True, name='multisource_main_factor_words')[0]
         # multisource_words => (num_samples, num_sources, max(source_len))
         multisource_length = utils.compute_lengths(multisource_words)
         # multisource_length => (num_samples, num_sources)
@@ -129,7 +129,7 @@ class TrainingModel(model.SockeyeModel):
             # (source_embed, source_embed_length, source_embed_seq_len)
             assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(source_seq_len)
             source_embeds = [
-               embedder.encode(source, source_length, source_seq_len)
+               embedder.encode(source, source_length, seq_len)
                for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, source_seq_len) ]
 
             # target embedding
@@ -139,13 +139,24 @@ class TrainingModel(model.SockeyeModel):
 
             # encoder
             # source_encoded: (batch_size, source_encoded_length, encoder_depth)
-            # (source_encoded, source_encoded_length, source_encoded_seq_len)
+            # [(source_encoded, source_encoded_length, source_encoded_seq_len)]
             source_encoded = [
-                    self.encoder.encode(source_embed, source_embed_length, source_embed_seq_len)
-                    for encoder, (source_embed, source_embed_length, source_embed_seq_len) in zip(self.encoder, source_embeds) ]
+                    encoder.encode(*encoder_args)
+                    for encoder, encoder_args in zip(self.encoder, source_embeds) ]
+
+            # TODO: Sam, merge the hidden units of all sources.
+            # Note factors have already been merged.
+            multisource_embeds = mx.sym.concat(*[source[0] for source in source_encoded], dim=2, name='multisource_combined_embeddings')
+            source_encoded = self.encoder2decoder(multisource_embeds)
+            # TODO: Sam what length should I be using here since not all sources have the same length?
+            source_encoded_length = source_encoded[0][1]
+            source_encoded_seq_len = source_encoded[0][2]
 
             # decoder
             # target_decoded: (batch-size, target_len, decoder_depth)
+            # :param source_encoded: Encoded source: (batch_size, source_encoded_max_length, encoder_depth).
+            # :param source_encoded_lengths: Lengths of encoded source sequences. Shape: (batch_size,).
+            # :param source_encoded_max_length: Size of encoder time dimension.
             target_decoded = self.decoder.decode_sequence(source_encoded, source_encoded_length, source_encoded_seq_len,
                                                           target_embed, target_embed_length, target_embed_seq_len)
 

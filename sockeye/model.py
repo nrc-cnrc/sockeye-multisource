@@ -102,6 +102,7 @@ class SockeyeModel:
         self.config.freeze()
         self.prefix = prefix
         logger.info("%s", self.config)
+        num_sources = len(self.config.config_encoder)
 
         # encoder & decoder first (to know the decoder depth)
         self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoder ]
@@ -115,14 +116,22 @@ class SockeyeModel:
             if isinstance(self.config.config_embed_source, encoder.PassThroughEmbeddingConfig):
                 self.embedding_source.append(encoder.PassThroughEmbedding(config))  # type: encoder.Encoder
             else:
-                self.embedding_source = encoder.Embedding(config,
+                self.embedding_source.append(encoder.Embedding(config,
                                                           prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX,
                                                           embed_weight=weights,
-                                                          is_source=True)  # type: encoder.Encoder
+                                                          is_source=True))  # type: encoder.Encoder
+        assert len(self.config.config_encoder) == len(self.embedding_source)
 
         self.embedding_target = encoder.Embedding(self.config.config_embed_target,
                                                   prefix=self.prefix + C.TARGET_EMBEDDING_PREFIX,
                                                   embed_weight=embed_weight_target)
+
+        # multisource projection
+        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(config.model_size for config in self.config.config_encoder),
+                                               vocab_size=self.config.config_decoder.model_size,
+                                               weight = None,
+                                               weight_normalization=self.config.weight_normalization,
+                                               prefix=self.prefix + 'multisource_embedding_projection')
 
         # output layer
         self.output_layer = layers.OutputLayer(hidden_size=self.decoder.get_num_hidden(),

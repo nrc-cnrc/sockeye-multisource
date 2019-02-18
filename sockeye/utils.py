@@ -140,7 +140,7 @@ def compute_lengths(sequence_data: mx.sym.Symbol) -> mx.sym.Symbol:
     :return: Length data. Shape: (batch_size,).
     """
     shape = sequence_data.shape_array()
-    return mx.sym.sum(sequence_data != C.PAD_ID, axis=2)
+    return mx.sym.sum(sequence_data != C.PAD_ID, axis=2, name='number_of_words_per_sentence')
     if len(shape) == 2:
         return mx.sym.sum(sequence_data != C.PAD_ID, axis=1)
     if len(shape) == 3:
