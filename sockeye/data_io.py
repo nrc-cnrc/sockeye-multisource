@@ -193,7 +193,7 @@ def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
     largest_total_num_words = 0
     for buck_idx, bucket in enumerate(buckets):
         # Target/label length with padding
-        padded_seq_len = bucket[1]
+        padded_seq_len = bucket[-1]
         # Average target/label length excluding padding
         if data_target_average_len[buck_idx] is None:
             data_target_average_len[buck_idx] = padded_seq_len
@@ -215,8 +215,10 @@ def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
         # Track largest number of source or target word samples in a batch
         largest_total_num_words = max(largest_total_num_words, batch_size_seq * max(*bucket))
 
-    # Final step: guarantee that largest bucket by sequence length also has a batch size so that it covers any
-    # (batch_size, len_source) and (batch_size, len_target) matrix from the data iterator to allow for memory sharing.
+    # Final step: guarantee that largest bucket by sequence length also has a
+    # batch size so that it covers any (batch_size, len_source) and
+    # (batch_size, len_target) matrix from the data iterator to allow for
+    # memory sharing.
     # When batching by sentences, this will already be the case.
     if batch_by_words:
         padded_seq_len = max(*buckets[-1])
@@ -1100,6 +1102,7 @@ class DataConfig(config.Config):
         self.source_with_eos = source_with_eos
 
 
+
 def read_content(path: str, limit: Optional[int] = None) -> Iterator[List[str]]:
     """
     Returns a list of tokens for each line in path up to a limit.
@@ -1601,17 +1604,18 @@ class BaseParallelSampleIter(mx.io.DataIter):
         # other parts of the model, but it is possible that some architectures will have intermediate
         # operations that produce shapes larger than the default bucket size.  In these cases, MXNet
         # will silently allocate additional memory.
+        num_sources = len(self.default_bucket_key[:-1])
         self.provide_data = [
             mx.io.DataDesc(name=self.source_data_name,
-                           shape=(self.bucket_batch_sizes[-1].batch_size, self.default_bucket_key[0],
+                shape=(self.bucket_batch_sizes[-1].batch_size, num_sources, max(self.default_bucket_key[:-1]),
                                   self.num_factors),
                            layout=C.BATCH_MAJOR),
             mx.io.DataDesc(name=self.target_data_name,
-                           shape=(self.bucket_batch_sizes[-1].batch_size, self.default_bucket_key[1]),
+                           shape=(self.bucket_batch_sizes[-1].batch_size, self.default_bucket_key[-1]),
                            layout=C.BATCH_MAJOR)]
         self.provide_label = [
             mx.io.DataDesc(name=self.label_name,
-                           shape=(self.bucket_batch_sizes[-1].batch_size, self.default_bucket_key[1]),
+                           shape=(self.bucket_batch_sizes[-1].batch_size, self.default_bucket_key[-1]),
                            layout=C.BATCH_MAJOR)]
 
         self.data_names = [self.source_data_name, self.target_data_name]
@@ -1761,9 +1765,15 @@ class ParallelSampleIter(BaseParallelSampleIter):
                  num_factors: int = 1,
                  permute: bool = True,
                  dtype='float32') -> None:
-        super().__init__(buckets=buckets, batch_size=batch_size, bucket_batch_sizes=bucket_batch_sizes,
-                         source_data_name=source_data_name, target_data_name=target_data_name,
-                         label_name=label_name, num_factors=num_factors, permute=permute, dtype=dtype)
+        super().__init__(buckets=buckets,
+                batch_size=batch_size,
+                bucket_batch_sizes=bucket_batch_sizes,
+                source_data_name=source_data_name,
+                target_data_name=target_data_name,
+                label_name=label_name,
+                num_factors=num_factors,
+                permute=permute,
+                dtype=dtype)
 
         # create independent lists to be shuffled
         self.data = ParallelDataSet(list(data.source), list(data.target), list(data.label))

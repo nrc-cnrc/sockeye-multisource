@@ -68,7 +68,6 @@ class TrainingModel(model.SockeyeModel):
                  bucketing: bool,
                  gradient_compression_params: Optional[Dict[str, Any]] = None,
                  fixed_param_names: Optional[List[str]] = None) -> None:
-        #from pudb import set_trace; set_trace()
         super().__init__(config)
         self.context = context
         self.output_dir = output_dir
@@ -122,7 +121,6 @@ class TrainingModel(model.SockeyeModel):
             Returns a (grouped) loss symbol given source & target input lengths.
             Also returns data and label names for the BucketingModule.
             """
-            from pudb import set_trace; set_trace()
             *multisource_seq_len, target_seq_len = seq_lens
 
             # source embedding
@@ -173,7 +171,6 @@ class TrainingModel(model.SockeyeModel):
             return mx.sym.Group(loss_output), data_names, label_names
 
 
-        from pudb import set_trace; set_trace()
         if self.config.lhuc:
             arguments = sym_gen(default_bucket_key)[0].list_arguments()
             fixed_param_names = [a for a in arguments if not a.endswith(C.LHUC_NAME)]
