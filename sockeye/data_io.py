@@ -157,6 +157,13 @@ class BucketBatchSize:
         self.batch_size = batch_size
         self.average_words_per_batch = average_words_per_batch
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "BucketBatchSize[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+
 
 def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
                               batch_size: int,
@@ -326,6 +333,13 @@ class DataStatisticsAccumulator:
         self.max_observed_len_target = 0
         self._mean_len_target_per_bucket = [OnlineMeanAndVariance() for _ in range(num_buckets)]
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "DataStatisticsAccumulator[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+
     def sequence_pair(self,
                       source: List[int],
                       target: List[int],
@@ -466,6 +480,12 @@ class RawParallelDatasetLoader:
         self.eos_id = eos_id
         self.pad_id = pad_id
         self.dtype = dtype
+
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "RawParallelDatasetLoader[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
 
     def load(self,
              multisource_iterables: Sequence[Iterable],
@@ -963,6 +983,12 @@ class LengthStatistics(config.Config):
         self.length_ratio_mean = length_ratio_mean
         self.length_ratio_std = length_ratio_std
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "LengthStatistics[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
 
 class DataStatistics(config.Config):
 
@@ -998,6 +1024,12 @@ class DataStatistics(config.Config):
         self.buckets = buckets
         self.num_sents_per_bucket = num_sents_per_bucket
         self.average_len_target_per_bucket = mean_len_target_per_bucket
+
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "DataStatistics[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
 
     def log(self, bucket_batch_sizes: Optional[List[BucketBatchSize]] = None):
         logger.info("Tokens: source %d target %d", self.num_tokens_source, self.num_tokens_target)
@@ -1165,6 +1197,12 @@ class SequenceReader(Iterable):
         self.add_eos = add_eos
         self.limit = limit
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "SequenceReader[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     def __iter__(self):
         for tokens in read_content(self.path, self.limit):
             if self.vocab is not None:
@@ -1262,6 +1300,12 @@ class FileListReader(Iterator):
         self.fd = smart_open(fname)
         self.count = 0
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "FileListReader[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     def __next__(self):
         fname = self.fd.readline().strip("\n")
 
@@ -1337,6 +1381,12 @@ class ParallelDataSet(Sized):
         self.source = source
         self.target = target
         self.label = label
+
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "ParallelDataSet[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
 
     def __len__(self) -> int:
         return len(self.source)
@@ -1567,6 +1617,12 @@ class BaseParallelSampleIter(mx.io.DataIter):
         self.data_names = [self.source_data_name, self.target_data_name]
         self.label_names = [self.label_name]
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "BaseParallelSampleIter[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     @abstractmethod
     def reset(self):
         pass
@@ -1615,6 +1671,12 @@ class ShardedParallelSampleIter(BaseParallelSampleIter):
         self.fill_up = fill_up
 
         self.reset()
+
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "ShardedParallelSampleIter[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
 
     def _load_shard(self):
         shard_fname = self.shards_fnames[self.shard_index]
@@ -1718,6 +1780,13 @@ class ParallelSampleIter(BaseParallelSampleIter):
                                   for i in range(len(self.data))]
 
         self.reset()
+
+
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "ParallelSampleIter[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
 
     def reset(self):
         """
