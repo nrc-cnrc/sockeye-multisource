@@ -301,7 +301,7 @@ def are_token_parallel(sequences: Sequence[Sized]) -> bool:
     def per_source(sequence: Sized) -> bool:
         if not sequence or len(sequence) == 1:
             return True
-        return all(len(s) == len(sequence[0]) for s in sequence)
+        return all(len(factor) == len(sequence[0]) for factor in sequence)
 
     return all(per_source(sequence) for sequence in sequences)
 
@@ -1263,7 +1263,7 @@ def create_multisource_sequence_readers(sources: List[List[str]],
     return source_sequence_readers, target_sequence_reader
 
 
-def parallel_iter(source_iters: Sequence[Iterable[Optional[Any]]], target_iterable: Iterable[Optional[Any]]):
+def parallel_iter(source_iters: Sequence[Sequence[Iterable[Optional[Any]]]], target_iterable: Iterable[Optional[Any]]):
     """
     Yields parallel source(s), target sequences from iterables.
     Checks for token parallelism in source sequences.
@@ -1274,7 +1274,7 @@ def parallel_iter(source_iters: Sequence[Iterable[Optional[Any]]], target_iterab
     source_iters = [ map(iter, s) for s in source_iters ]
     target_iter = iter(target_iterable)
     for sources, target in zip(zip(*(zip(*l) for l in source_iters)), target_iter):
-        if any(any(s is None for s in source) for source in sources) or target is None:
+        if any(any(factor is None for factor in factors) for factors in sources) or target is None:
             num_skipped += 1
             continue
         check_condition(are_token_parallel(sources), "Source sequences are not token-parallel: %s" % (str(sources)))
@@ -1893,3 +1893,21 @@ class ParallelSampleIter(BaseParallelSampleIter):
             self.data_permutations.append(permutation)
 
         self.data = self.data.permute(self.data_permutations)
+
+
+
+
+
+
+if __name__ == '__main__':
+    from collections import defaultdict
+    #from pudb import set_trace; set_trace()
+    iterator = parallel_iter(
+            source_iters = [
+                [ map(str. split, open(f, 'r')) for f in ('sam/corpora/source_0_0', 'sam/corpora/source_0_1', 'sam/corpora/source_0_2') ],
+                [ map(str. split, open(f, 'r')) for f in ('sam/corpora/source_1_0', 'sam/corpora/source_1_1', 'sam/corpora/source_1_2') ],
+                ],
+            target_iterable = map(str. split, open('sam/corpora/train_en', 'r'))
+            )
+    for value in iterator:
+        print(value)

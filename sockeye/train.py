@@ -264,7 +264,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
 
     validation_multisource = merge_with_factors(args.validation_source, args.validation_source_factors)
     validation_multisource = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_multisource]
-    validation_target  = [ str(os.path.abspath(target)) for target in args.validation_target ]
+    validation_target  = str(os.path.abspath(args.validation_target))
 
     either_raw_or_prepared_error_msg = "Either specify a raw training corpus with %s and %s or a preprocessed corpus " \
                                        "with %s." % (C.TRAINING_ARG_SOURCE,
