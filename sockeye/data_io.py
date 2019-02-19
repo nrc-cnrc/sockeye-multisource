@@ -23,6 +23,7 @@ import random
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from contextlib import ExitStack
+from itertools import zip_longest
 from typing import Any, cast, Dict, Iterator, Iterable, List, Optional, Sequence, Sized, Tuple, Set
 
 import mxnet as mx
@@ -73,7 +74,7 @@ def define_multisource_parallel_buckets(max_seq_len_source: int,
 def define_parallel_buckets(max_seq_len_source: int,
                             max_seq_len_target: int,
                             bucket_width: int = 10,
-                            length_ratios: float = 1.0):
+                            length_ratio: float = 1.0):
     """
     Returns (source, target) buckets up to (max_seq_len_source, max_seq_len_target).  The longer side of the data uses
     steps of bucket_width while the shorter side uses steps scaled down by the average target/source length ratio.  If
@@ -234,7 +235,7 @@ def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
 def calculate_length_statistics(source_iterables: Sequence[Iterable[Any]],
                                 target_iterable: Iterable[Any],
                                 max_seq_len_source: int,
-                                max_seq_len_target: int) -> 'LengthStatistics':
+                                max_seq_len_target: int) -> List['LengthStatistics']:
     """
     Returns mean and standard deviation of target-to-source length ratios of parallel corpus.
 
@@ -270,12 +271,12 @@ def calculate_length_statistics(source_iterables: Sequence[Iterable[Any]],
     return length_statistics
 
 
-def analyze_sequence_lengths(sources: List[str],
+def analyze_sequence_lengths(sources: List[List[str]],
                              target: str,
-                             vocab_sources: List[vocab.Vocab],
+                             vocab_sources: List[List[vocab.Vocab]],
                              vocab_target: vocab.Vocab,
                              max_seq_len_source: int,
-                             max_seq_len_target: int) -> 'LengthStatistics':
+                             max_seq_len_target: int) -> List['LengthStatistics']:
     train_sources_sentences, train_target_sentences = create_multisource_sequence_readers(sources,
             target, vocab_sources, vocab_target)
 
@@ -297,10 +298,10 @@ def are_token_parallel(sequences: Sequence[Sized]) -> bool:
     """
     Returns True if all sequences in the list have the same length.
     """
-    def per_source(sequence: Sequence[Sized]) -> bool:
-        if not sequences or len(sequences) == 1:
+    def per_source(sequence: Sized) -> bool:
+        if not sequence or len(sequence) == 1:
             return True
-        return all(len(s) == len(sequences[0]) for s in sequences)
+        return all(len(s) == len(sequence[0]) for s in sequence)
 
     return all(per_source(sequence) for sequence in sequences)
 
@@ -311,8 +312,8 @@ class DataStatisticsAccumulator:
                  buckets: List[Tuple[int, int]],
                  vocab_source: Optional[Dict[str, int]],
                  vocab_target: Dict[str, int],
-                 length_ratio_mean: List[float],
-                 length_ratio_std: List[float]) -> None:
+                 length_ratio_mean: float,
+                 length_ratio_std: float) -> None:
         self.buckets = buckets
         num_buckets = len(buckets)
         self.length_ratio_mean = length_ratio_mean
@@ -472,7 +473,7 @@ class RawParallelDatasetLoader:
     """
 
     def __init__(self,
-                 buckets: List[Tuple[int, int]],
+                 buckets: List[Tuple[int, ...]],
                  num_factors: int,
                  eos_id: int,
                  pad_id: int,
@@ -671,8 +672,8 @@ def get_data_statistics(source_readers: Optional[Sequence[Iterable]],
                         buckets: List[Tuple[int, int]],
                         length_ratio_mean: List[float],
                         length_ratio_std: List[float],
-                        source_vocabs: Optional[List[vocab.Vocab]],
-                        target_vocab: vocab.Vocab) -> 'DataStatistics':
+                        source_vocabs: Optional[List[List[vocab.Vocab]]],
+                        target_vocab: vocab.Vocab) -> List['DataStatistics']:
 
     if source_readers is not None:
         data_stats_accumulators =  [ DataStatisticsAccumulator(buckets,
@@ -699,11 +700,11 @@ def get_data_statistics(source_readers: Optional[Sequence[Iterable]],
 
 
 def get_validation_data_iter(data_loader: RawParallelDatasetLoader,
-                             validation_sources: List[str],
+                             validation_sources: List[List[str]],
                              validation_target: str,
-                             buckets: List[Tuple[int, int]],
+                             buckets: List[Tuple[int, ...]],
                              bucket_batch_sizes: List[BucketBatchSize],
-                             source_vocabs: List[vocab.Vocab],
+                             source_vocabs: List[List[vocab.Vocab]],
                              target_vocab: vocab.Vocab,
                              max_seq_len_source: int,
                              max_seq_len_target: int,
@@ -837,8 +838,8 @@ def get_prepared_data_iters(prepared_data_dir: str,
 
 def get_training_data_iters(multisource_with_factors: List[List[str]],
                             target: str,
-                            validation_sources: Optional[List[str]],
-                            validation_target: Optional[str],
+                            validation_sources: Optional[List[List[str]]],
+                            validation_target: Optional[List[str]],
                             source_vocabs: List[List[vocab.Vocab]],
                             target_vocab: vocab.Vocab,
                             source_vocab_paths: List[List[Optional[str]]],
@@ -1254,9 +1255,10 @@ def create_multisource_sequence_readers(sources: List[List[str]],
     :param vocab_target: The target vocabularies.
     :return: The source sequence readers and the target reader.
     """
+    #TODO: What if we don't have all dictionaries?
     assert all(len(source) == len(vocab) for (source, vocab) in zip(sources, vocab_sources))
-    source_sequence_readers = [ [ SequenceReader(s, v, add_eos=True) for s, v in zip(source, vocab) ]
-            for source, vocab in zip(sources, vocab_sources)]
+    source_sequence_readers = [ [ SequenceReader(s, v, add_eos=True) for s, v in zip_longest(source, vocab, fillvalue=None) ]
+            for source, vocab in zip_longest(sources, vocab_sources, fillvalue=[])]
     target_sequence_reader = SequenceReader(target, vocab_target, add_bos=True)
     return source_sequence_readers, target_sequence_reader
 

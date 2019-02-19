@@ -264,7 +264,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
 
     validation_multisource = merge_with_factors(args.validation_source, args.validation_source_factors)
     validation_multisource = [ [ str(os.path.abspath(s)) for s in source ] for source in validation_multisource]
-    validation_target  = str(os.path.abspath(args.validation_target))
+    validation_target  = [ str(os.path.abspath(target)) for target in args.validation_target ]
 
     either_raw_or_prepared_error_msg = "Either specify a raw training corpus with %s and %s or a preprocessed corpus " \
                                        "with %s." % (C.TRAINING_ARG_SOURCE,
@@ -399,7 +399,7 @@ def create_encoder_config(args: argparse.Namespace,
     """
     encoder_num_layers, _ = args.num_layers
     num_embed_source, _ = args.num_embed
-    config_encoder = None  # type: Optional[Config]
+    config_encoders = None  # type: Optional[Config]
 
     if args.decoder_only:
         if args.encoder in (C.TRANSFORMER_TYPE, C.TRANSFORMER_WITH_CONV_EMBED_TYPE):
@@ -408,7 +408,7 @@ def create_encoder_config(args: argparse.Namespace,
             encoder_num_hidden = args.cnn_num_hidden
         else:
             encoder_num_hidden = args.rnn_num_hidden
-        config_encoder = encoder.EmptyEncoderConfig(num_embed=num_embed_source,
+        config_encoders = encoder.EmptyEncoderConfig(num_embed=num_embed_source,
                                                     num_hidden=encoder_num_hidden)
     elif args.encoder in (C.TRANSFORMER_TYPE, C.TRANSFORMER_WITH_CONV_EMBED_TYPE):
         encoder_transformer_preprocess, _ = args.transformer_preprocess
@@ -420,7 +420,7 @@ def create_encoder_config(args: argparse.Namespace,
             logger.info("Encoder transformer-model-size adjusted to account for source factor embeddings: %d -> %d" % (
                 encoder_transformer_model_size, num_embed_source + total_source_factor_size))
             encoder_transformer_model_size = num_embed_source + total_source_factor_size
-        config_encoder = transformer.TransformerConfig(
+        config_encoders = transformer.TransformerConfig(
             model_size=encoder_transformer_model_size,
             attention_heads=args.transformer_attention_heads[0],
             feed_forward_num_hidden=args.transformer_feed_forward_num_hidden[0],
@@ -446,7 +446,7 @@ def create_encoder_config(args: argparse.Namespace,
         cnn_num_embed = num_embed_source
         if args.source_factors_combine == C.SOURCE_FACTORS_COMBINE_CONCAT:
             cnn_num_embed += sum(args.source_factors_num_embed)
-        config_encoder = encoder.ConvolutionalEncoderConfig(num_embed=cnn_num_embed,
+        config_encoders = encoder.ConvolutionalEncoderConfig(num_embed=cnn_num_embed,
                                                             max_seq_len_source=max_seq_len_source,
                                                             cnn_config=cnn_config,
                                                             num_layers=encoder_num_layers,
@@ -457,7 +457,7 @@ def create_encoder_config(args: argparse.Namespace,
         encoder_rnn_dropout_inputs, _ = args.rnn_dropout_inputs
         encoder_rnn_dropout_states, _ = args.rnn_dropout_states
         encoder_rnn_dropout_recurrent, _ = args.rnn_dropout_recurrent
-        config_encoder = encoder.RecurrentEncoderConfig(
+        config_encoders = encoder.RecurrentEncoderConfig(
             rnn_config=rnn.RNNConfig(cell_type=args.rnn_cell_type,
                                      num_hidden=args.rnn_num_hidden,
                                      num_layers=encoder_num_layers,
@@ -472,7 +472,7 @@ def create_encoder_config(args: argparse.Namespace,
             reverse_input=args.rnn_encoder_reverse_input)
         encoder_num_hidden = args.rnn_num_hidden
 
-    return config_encoder, encoder_num_hidden
+    return config_encoders, encoder_num_hidden
 
 
 def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
@@ -650,15 +650,15 @@ def create_model_config(args: argparse.Namespace,
                                                            num_highway_layers=args.conv_embed_num_highway_layers,
                                                            dropout=args.conv_embed_dropout)
 
-    config_encoder = []
+    config_encoders = []
     for _ in source_vocab_sizes:
         config, encoder_num_hidden = create_encoder_config(args, max_seq_len_source, max_seq_len_target,
                                                            config_conv)
-        config_encoder.append(config)
+        config_encoders.append(config)
     config_decoder = create_decoder_config(args, encoder_num_hidden, max_seq_len_source, max_seq_len_target)
 
     # TODO: Sam there was a patch done here to handle combining embeddings (9c5ed6e30fa0421044b2feecb9138f708a555c5a).
-    config_embed_source = []
+    config_embed_sources = []
     for sizes in source_vocab_sizes:
         size, *factor_sizes = sizes
         source_factor_configs = None
@@ -666,7 +666,7 @@ def create_model_config(args: argparse.Namespace,
             source_factor_configs = [ encoder.FactorConfig(size, dim)
                     for size, dim in zip(sizes, args.source_factors_num_embed) ]
 
-        config_embed_source.append(encoder.EmbeddingConfig(vocab_size=size,
+        config_embed_sources.append(encoder.EmbeddingConfig(vocab_size=size,
                                                       num_embed=num_embed_source,
                                                       dropout=embed_dropout_source,
                                                       factor_configs=source_factor_configs,
@@ -684,9 +684,9 @@ def create_model_config(args: argparse.Namespace,
     model_config = model.ModelConfig(config_data=config_data,
                                      vocab_source_size=source_vocab_size,
                                      vocab_target_size=target_vocab_size,
-                                     config_embed_source=config_embed_source,
+                                     config_embed_sources=config_embed_sources,
                                      config_embed_target=config_embed_target,
-                                     config_encoder=config_encoder,
+                                     config_encoders=config_encoders,
                                      config_decoder=config_decoder,
                                      config_loss=config_loss,
                                      weight_tying=args.weight_tying,
@@ -778,7 +778,7 @@ def create_optimizer_config(args: argparse.Namespace, source_vocab_sizes: List[i
                                               default_init_xavier_rand_type=args.weight_init_xavier_rand_type,
                                               default_init_xavier_factor_type=args.weight_init_xavier_factor_type,
                                               embed_init_type=args.embed_weight_init,
-                                              embed_init_sigma=source_vocab_sizes[0] ** -0.5,
+                                              embed_init_sigma=source_vocab_sizes[0][0] ** -0.5,
                                               rnn_init_type=args.rnn_h2h_init,
                                               extra_initializers=extra_initializers)
 

@@ -84,8 +84,9 @@ class TrainingModel(model.SockeyeModel):
         """
         Initializes model components, creates training symbol and module, and binds it.
         """
-        num_sources = len(self.config.config_embed_source)
-        num_factors = self.config.config_embed_source[0].num_factors
+        from pudb import set_trace; set_trace()
+        num_sources = len(self.config.config_embed_sources)
+        num_factors = self.config.config_embed_sources[0].num_factors
 
         source = mx.sym.Variable(C.SOURCE_NAME)
         # source => (num_samples, num_sources, max(source_len), num_factors)
@@ -146,10 +147,13 @@ class TrainingModel(model.SockeyeModel):
             source_encoded_length = multisource_encoded[0][1]
             source_encoded_seq_len = multisource_encoded[0][2]
 
-            # TODO: Sam, merge the hidden units of all sources.
-            # Note factors have already been merged.
-            multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
-            source_encoded = self.encoder2decoder(multisource_encoded_concat)
+            if False:
+                # TODO: Sam, merge the hidden units of all sources.
+                # Note factors have already been merged.
+                multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
+                source_encoded = self.encoder2decoder(multisource_encoded_concat)
+            else:
+                source_encoded = multisource_encoded[0][0]
 
             # decoder
             # target_decoded: (batch-size, target_len, decoder_depth)

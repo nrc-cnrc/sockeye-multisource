@@ -40,9 +40,9 @@ class ModelConfig(Config):
     :param config_data: Used training data.
     :param vocab_source_size: Source vocabulary size.
     :param vocab_target_size: Target vocabulary size.
-    :param config_embed_source: Embedding config for source.
+    :param config_embed_sources: Embedding config for sources.
     :param config_embed_target: Embedding config for target.
-    :param config_encoder: Encoder configuration.
+    :param config_encoders: Encoders' configuration.
     :param config_decoder: Decoder configuration.
     :param config_loss: Loss configuration.
     :param weight_tying: Enables weight tying if True.
@@ -54,9 +54,9 @@ class ModelConfig(Config):
                  config_data: data_io.DataConfig,
                  vocab_source_size: int,
                  vocab_target_size: int,
-                 config_embed_source: encoder.EmbeddingConfig,
+                 config_embed_sources: List[encoder.EmbeddingConfig],
                  config_embed_target: encoder.EmbeddingConfig,
-                 config_encoder: encoder.EncoderConfig,
+                 config_encoders: List[encoder.EncoderConfig],
                  config_decoder: decoder.DecoderConfig,
                  config_loss: loss.LossConfig,
                  weight_tying: bool = False,
@@ -67,9 +67,9 @@ class ModelConfig(Config):
         self.config_data = config_data
         self.vocab_source_size = vocab_source_size
         self.vocab_target_size = vocab_target_size
-        self.config_embed_source = config_embed_source
+        self.config_embed_sources = config_embed_sources
         self.config_embed_target = config_embed_target
-        self.config_encoder = config_encoder
+        self.config_encoders = config_encoders
         self.config_decoder = config_decoder
         self.config_loss = config_loss
         self.weight_tying = weight_tying
@@ -102,32 +102,33 @@ class SockeyeModel:
         self.config.freeze()
         self.prefix = prefix
         logger.info("%s", self.config)
-        num_sources = len(self.config.config_encoder)
+        num_sources = len(self.config.config_encoders)
 
         # encoder & decoder first (to know the decoder depth)
-        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoder ]
+        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoders ]
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
 
         # source & target embeddings
         embed_weight_source, embed_weight_target, out_weight_target = self._get_embed_weights(self.prefix)
-        assert len(embed_weight_source) == len(self.config.config_embed_source)
-        self.embedding_source = []
-        for weights, config in zip(embed_weight_source, self.config.config_embed_source):
-            if isinstance(self.config.config_embed_source, encoder.PassThroughEmbeddingConfig):
-                self.embedding_source.append(encoder.PassThroughEmbedding(config))  # type: encoder.Encoder
+        assert len(embed_weight_source) == len(self.config.config_embed_sources)
+        self.embedding_source : List[encoder.Encoder] = []
+        for weights, config_embed in zip(embed_weight_source, self.config.config_embed_sources):
+            if isinstance(config_embed, encoder.PassThroughEmbeddingConfig):
+                self.embedding_source.append(encoder.PassThroughEmbedding(config_embed))  # type: encoder.Encoder
             else:
-                self.embedding_source.append(encoder.Embedding(config,
+                self.embedding_source.append(encoder.Embedding(config_embed,
                                                           prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX,
                                                           embed_weight=weights,
                                                           is_source=True))  # type: encoder.Encoder
-        assert len(self.config.config_encoder) == len(self.embedding_source)
+        assert len(self.config.config_encoders) == len(self.embedding_source)
 
         self.embedding_target = encoder.Embedding(self.config.config_embed_target,
                                                   prefix=self.prefix + C.TARGET_EMBEDDING_PREFIX,
                                                   embed_weight=embed_weight_target)
 
         # multisource projection
-        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(config.model_size for config in self.config.config_encoder),
+        # TODO: Sam Where is the model size?
+        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(config_encoder.model_size for config_encoder in self.config.config_encoders),
                                                vocab_size=self.config.config_decoder.model_size,
                                                weight = None,
                                                weight_normalization=self.config.weight_normalization,
@@ -215,7 +216,7 @@ class SockeyeModel:
         """
         w_embed_source = [ mx.sym.Variable(prefix + C.SOURCE_EMBEDDING_PREFIX + "weight%d" % i,
                                          shape=(config.vocab_size, config.num_embed)) 
-                            for i, config in enumerate(self.config.config_embed_source) ]
+                            for i, config in enumerate(self.config.config_embed_sources) ]
         w_embed_target = mx.sym.Variable(prefix + C.TARGET_EMBEDDING_PREFIX + "weight",
                                          shape=(self.config.config_embed_target.vocab_size,
                                                 self.config.config_embed_target.num_embed))
@@ -230,8 +231,8 @@ class SockeyeModel:
                 # TODO: Sam Implement weight tying with multiple sources.
                 assert False, "Not Yet Implemented."
                 w_embed_source = w_embed_target = mx.sym.Variable(prefix + C.SHARED_EMBEDDING_PREFIX + "weight",
-                                                                  shape=(self.config.config_embed_source.vocab_size,
-                                                                         self.config.config_embed_source.num_embed))
+                                                                  shape=(self.config.config_embed_sources.vocab_size,
+                                                                         self.config.config_embed_sources.num_embed))
 
             if C.WEIGHT_TYING_SOFTMAX in self.config.weight_tying_type:
                 logger.info("Tying the target embeddings and output layer parameters.")
