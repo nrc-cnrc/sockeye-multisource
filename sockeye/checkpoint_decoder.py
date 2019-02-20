@@ -19,7 +19,7 @@ import os
 import random
 import time
 from contextlib import ExitStack
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Sequence, Tuple
 
 import mxnet as mx
 
@@ -58,7 +58,7 @@ class CheckpointDecoder:
 
     def __init__(self,
                  context: mx.context.Context,
-                 inputs: List[str],
+                 multisource: List[List[str]],
                  references: str,
                  model: str,
                  max_input_len: Optional[int] = None,
@@ -87,31 +87,35 @@ class CheckpointDecoder:
         self.model = model
 
         with ExitStack() as exit_stack:
-            inputs_fins = [exit_stack.enter_context(data_io.smart_open(f)) for f in inputs]
+            inputs_fins = [ [ exit_stack.enter_context(data_io.smart_open(factor)) for factor in source ] for source in multisource ]
             references_fin = exit_stack.enter_context(data_io.smart_open(references))
 
-            inputs_sentences = [f.readlines() for f in inputs_fins]
+            inputs_sentences = [ [ factor.readlines() for factor in source ] for source in inputs_fins ]
             target_sentences = references_fin.readlines()
 
-            utils.check_condition(all(len(l) == len(target_sentences) for l in inputs_sentences),
+            utils.check_condition(all(all(len(l) == len(target_sentences) for l in source) for source in inputs_sentences),
                                   "Sentences differ in length")
 
+            num_samples = len(inputs_sentences[0][0])
             if sample_size <= 0:
-                sample_size = len(inputs_sentences[0])
-            if sample_size < len(inputs_sentences[0]):
-                self.target_sentences, *self.inputs_sentences = parallel_subsample(
-                    [target_sentences] + inputs_sentences, sample_size, random_seed)
+                sample_size = num_samples
+
+            if sample_size < num_samples:
+                self.inputs_sentences, self.target_sentences = parallel_subsample(inputs_sentences, target_sentences, sample_size, random_seed)
             else:
                 self.inputs_sentences, self.target_sentences = inputs_sentences, target_sentences
 
             if sample_size < self.batch_size:
                 self.batch_size = sample_size
 
-        for i, factor in enumerate(self.inputs_sentences):
-            write_to_file(factor, os.path.join(self.model, C.DECODE_IN_NAME % i))
+        for s, source in enumerate(self.inputs_sentences):
+            for f, factor in enumerate(source):
+                write_to_file(factor, os.path.join(self.model, C.DECODE_IN_NAME % (s, f)))
         write_to_file(self.target_sentences, os.path.join(self.model, C.DECODE_REF_NAME))
 
-        self.inputs_sentences = list(zip(*self.inputs_sentences))  # type: List[List[str]]
+        self.inputs_sentences = list(zip(*(zip(*l) for l in self.inputs_sentences)))  # type: Sequence[Sequence[Sequence[str]]]
+        # self.inputs_sentences => num_samples, num_sources, num_factors
+        #self.inputs_sentences = list(zip(*self.inputs_sentences))  # type: List[List[str]]
 
         logger.info("Created CheckpointDecoder(max_input_len=%d, beam_size=%d, model=%s, num_sentences=%d, context=%s)",
                     max_input_len if max_input_len is not None else -1, beam_size, model, len(self.target_sentences),
@@ -179,12 +183,21 @@ class CheckpointDecoder:
                 C.DECODING_TIME: trans_wall_time}
 
 
-def parallel_subsample(parallel_sequences: List[List[Any]], sample_size: int, seed: int) -> List[Any]:
+def parallel_subsample(multisource: Sequence[Sequence[str]], target: Sequence[str], sample_size: int, seed: int) -> Tuple[List[List[str]], List[str]]:
     # custom random number generator to guarantee the same samples across runs in order to be able to
     # compare metrics across independent runs
+    multisource_sample = []  # type: List[List[str]]
+    for source in multisource:
+        sample = []
+        for factor in source:
+            random_gen = random.Random(seed)
+            sample.append(random_gen.sample(factor, sample_size))
+        multisource_sample.append(sample)
+
     random_gen = random.Random(seed)
-    parallel_sample = list(zip(*random_gen.sample(list(zip(*parallel_sequences)), sample_size)))
-    return parallel_sample
+    target_sample = random_gen.sample(target, sample_size)
+
+    return multisource_sample, target_sample
 
 
 def write_to_file(data: List[str], fname: str):

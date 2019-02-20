@@ -196,7 +196,7 @@ def create_checkpoint_decoder(args: argparse.Namespace,
         context = train_context[-1]
 
     return checkpoint_decoder.CheckpointDecoder(context=context,
-                                                inputs=[args.validation_source] + args.validation_source_factors,
+                                                multisource=merge_with_factors(args.validation_source, args.validation_source_factors),
                                                 references=args.validation_target,
                                                 model=args.output,
                                                 sample_size=sample_size)
