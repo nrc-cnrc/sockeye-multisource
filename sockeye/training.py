@@ -21,7 +21,7 @@ import random
 import shutil
 import time
 from functools import reduce
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Sequence
 
 import mxnet as mx
 import numpy as np
@@ -1056,11 +1056,13 @@ class TensorboardLogger:
 
     def __init__(self,
                  logdir: str,
-                 source_vocab: Optional[vocab.Vocab] = None,
+                 source_vocab: Optional[Sequence[vocab.Vocab]] = None,
                  target_vocab: Optional[vocab.Vocab] = None) -> None:
         self.logdir = logdir
-        self.source_labels = vocab.get_ordered_tokens_from_vocab(source_vocab) if source_vocab is not None else None
-        self.target_labels = vocab.get_ordered_tokens_from_vocab(target_vocab) if source_vocab is not None else None
+        self.source_labels = None
+        if source_vocab is not None:
+            self.source_labels = [ vocab.get_ordered_tokens_from_vocab(voc) for voc in source_vocab ]
+        self.target_labels = vocab.get_ordered_tokens_from_vocab(target_vocab) if target_vocab is not None else None
         try:
             import mxboard
             logger.info("Logging training events for Tensorboard at '%s'", self.logdir)
@@ -1084,10 +1086,11 @@ class TensorboardLogger:
             return
         self.sw.add_graph(symbol)
 
-    def log_source_embedding(self, embedding: mx.nd.NDArray, checkpoint: int):
+    def log_source_embedding(self, embeddings: Sequence[mx.nd.NDArray], checkpoint: int):
         if self.sw is None or self.source_labels is None:
             return
-        self.sw.add_embedding(tag="source", embedding=embedding, labels=self.source_labels, global_step=checkpoint)
+        for i, (embedding, labels) in enumerate(zip(embeddings, self.source_labels)):
+            self.sw.add_embedding(tag="source%d"%i, embedding=embedding, labels=labels, global_step=checkpoint)
 
     def log_target_embedding(self, embedding: mx.nd.NDArray, checkpoint: int):
         if self.sw is None or self.target_labels is None:
