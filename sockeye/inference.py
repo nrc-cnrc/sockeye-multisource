@@ -163,23 +163,45 @@ class InferenceModel(model.SockeyeModel):
         :return: Tuple of encoder module and default bucket key.
         """
 
-        def sym_gen(source_seq_len: int):
+        def sym_gen(multisource_seq_len: int):
             source = mx.sym.Variable(C.SOURCE_NAME)
-            source_words = source.split(num_outputs=self.num_source_factors, axis=2, squeeze_axis=True)[0]
-            source_length = utils.compute_lengths(source_words)
+            # source => (num_samples, num_sources, max(source_len), num_factors)
+            multisource_words = source.split(
+                    num_outputs=self.num_source_factors,
+                    axis=3,
+                    squeeze_axis=True,
+                    name='multisource_main_factor_words')[0]
+            # multisource_words => (num_samples, num_sources, max(source_len))
+            multisource_length = utils.compute_lengths(multisource_words)
+            # multisource_length => (num_samples, num_sources)
+            multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True, name='multisource_length')
+            # multisource_length => [(num_samples) x num_sources]
 
             # source embedding
-            (source_embed,
-             source_embed_length,
-             source_embed_seq_len) = self.embedding_source.encode(source, source_length, source_seq_len)
+            # (source_embed, source_embed_length, source_embed_seq_len)
+            assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
+            multisource_embeds = [
+               embedder.encode(source, source_length, seq_len)
+               for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
 
             # encoder
-            # source_encoded: (source_encoded_length, batch_size, encoder_depth)
-            (source_encoded,
-             source_encoded_length,
-             source_encoded_seq_len) = self.encoder.encode(source_embed,
-                                                           source_embed_length,
-                                                           source_embed_seq_len)
+            # source_encoded: (batch_size, source_encoded_length, encoder_depth)
+            # [(source_encoded, source_encoded_length, source_encoded_seq_len)]
+            multisource_encoded = [
+                    encoder.encode(*encoder_args)
+                    for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
+
+            # TODO: Sam what length should I be using here since not all sources have the same length?
+            source_encoded_length = multisource_encoded[0][1]
+            source_encoded_seq_len = multisource_encoded[0][2]
+
+            if False:
+                # TODO: Sam, merge the hidden units of all sources.
+                # Note factors have already been merged.
+                multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
+                source_encoded = self.encoder2decoder(multisource_encoded_concat)
+            else:
+                source_encoded = multisource_encoded[0][0]
 
             # initial decoder states
             decoder_init_states = self.decoder.init_states(source_encoded,

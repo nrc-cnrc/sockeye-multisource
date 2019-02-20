@@ -84,7 +84,6 @@ class TrainingModel(model.SockeyeModel):
         """
         Initializes model components, creates training symbol and module, and binds it.
         """
-        from pudb import set_trace; set_trace()
         num_sources = len(self.config.config_embed_sources)
         num_factors = self.config.config_embed_sources[0].num_factors
 
@@ -100,6 +99,7 @@ class TrainingModel(model.SockeyeModel):
         # multisource_length => (num_samples, num_sources)
         multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True)
         # multisource_length => [(num_samples) x num_sources]
+
         target = mx.sym.Variable(C.TARGET_NAME)
         target_length = utils.compute_lengths(target)
         labels = mx.sym.reshape(data=mx.sym.Variable(C.TARGET_LABEL_NAME), shape=(-1,))
@@ -117,7 +117,7 @@ class TrainingModel(model.SockeyeModel):
         utils.check_condition(provide_label_names == label_names,
                               "incompatible provide_label: %s, names should be %s" % (provide_label_names, label_names))
 
-        def sym_gen(seq_lens):
+        def sym_gen(seq_lens: Sequence[int]):
             """
             Returns a (grouped) loss symbol given source & target input lengths.
             Also returns data and label names for the BucketingModule.

@@ -232,7 +232,7 @@ def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
     return bucket_batch_sizes
 
 
-def calculate_length_statistics(source_iterables: Sequence[Iterable[Any]],
+def calculate_length_statistics(source_iterables: Sequence[Sequence[Iterable[Any]]],
                                 target_iterable: Iterable[Any],
                                 max_seq_len_source: int,
                                 max_seq_len_target: int) -> List['LengthStatistics']:
@@ -294,7 +294,7 @@ def analyze_sequence_lengths(sources: List[List[str]],
     return length_statistics
 
 
-def are_token_parallel(sequences: Sequence[Sized]) -> bool:
+def are_token_parallel(sequences: Sequence[Sequence[Sized]]) -> bool:
     """
     Returns True if all sequences in the list have the same length.
     """
@@ -750,7 +750,7 @@ def get_validation_data_iter(data_loader: RawParallelDatasetLoader,
 
 
 def get_prepared_data_iters(prepared_data_dir: str,
-                            validation_sources: List[str],
+                            validation_sources: List[List[str]],
                             validation_target: str,
                             shared_vocab: bool,
                             batch_size: int,
