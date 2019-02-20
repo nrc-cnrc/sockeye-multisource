@@ -112,12 +112,12 @@ class SockeyeModel:
         embed_weight_source, embed_weight_target, out_weight_target = self._get_embed_weights(self.prefix)
         assert len(embed_weight_source) == len(self.config.config_embed_sources)
         self.embedding_source : List[encoder.Encoder] = []
-        for weights, config_embed in zip(embed_weight_source, self.config.config_embed_sources):
+        for i, (weights, config_embed) in enumerate(zip(embed_weight_source, self.config.config_embed_sources)):
             if isinstance(config_embed, encoder.PassThroughEmbeddingConfig):
                 self.embedding_source.append(encoder.PassThroughEmbedding(config_embed))  # type: encoder.Encoder
             else:
                 self.embedding_source.append(encoder.Embedding(config_embed,
-                                                          prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX,
+                                                          prefix=self.prefix + C.SOURCE_EMBEDDING_PREFIX + '%d_'%i,
                                                           embed_weight=weights,
                                                           is_source=True))  # type: encoder.Encoder
         assert len(self.config.config_encoders) == len(self.embedding_source)
@@ -214,7 +214,7 @@ class SockeyeModel:
         :param prefix: Prefix.
         :return: Tuple of source and target parameter symbols.
         """
-        w_embed_source = [ mx.sym.Variable(prefix + C.SOURCE_EMBEDDING_PREFIX + "weight%d" % i,
+        w_embed_source = [ mx.sym.Variable(prefix + C.SOURCE_EMBEDDING_PREFIX + "%d_weight" % i,
                                          shape=(config.vocab_size, config.num_embed)) 
                             for i, config in enumerate(self.config.config_embed_sources) ]
         w_embed_target = mx.sym.Variable(prefix + C.TARGET_EMBEDDING_PREFIX + "weight",
