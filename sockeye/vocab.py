@@ -284,7 +284,7 @@ def load_or_create_vocabs(source: Sequence[str],
             utils.check_condition(are_identical(*vocab_sources, vocab_target),
                                   "Shared vocabulary requires identical source and target vocabularies. "
                                   "The vocabularies in %s and %s are not identical." 
-                                  % (':'.join(p.vocab for p in source_vocab_path), target_vocab_path.vocab))
+                                  % (':'.join(p.vocab for p in source_path), target_path.vocab))
 
         elif all(path.vocab is None for path in source_path) and target_path.vocab is None:
             utils.check_condition(num_words_source == num_words_target,
@@ -304,7 +304,7 @@ def load_or_create_vocabs(source: Sequence[str],
                 vocab_target = vocab_from_json(target_path.vocab)
                 vocab_sources = [vocab_target] * len(source_path)
             else:
-                paths = ':'.join(p.vocab for p in source_vocab_path)
+                paths = ':'.join(p.vocab for p in source_path)
                 logger.info("Using %s as a shared source/target vocabulary." % paths)
                 vocab_sources = [ vocab_from_json(path.vocab) for path in source_path ]
                 utils.check_condition(are_identical(*vocab_sources),
