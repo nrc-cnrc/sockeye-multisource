@@ -45,6 +45,7 @@ class InferenceModel(model.SockeyeModel):
 
     (1) Encoder forward call: encode source sentence and return initial decoder states.
     (2) Decoder forward call: single decoder step: predict next word.
+    (3) A secret, undocumented, third step ;)
 
     :param config: Configuration object holding details about the model.
     :param params_fname: File with model parameters.
@@ -100,9 +101,16 @@ class InferenceModel(model.SockeyeModel):
     @property
     def num_source_factors(self) -> int:
         """
-        Returns the number of source factors of this InferenceModel (at least 1).
+        Returns the number of source factors per source of this InferenceModel (at least 1).
         """
         return self.config.config_data.num_source_factors
+
+    @property
+    def num_sources(self) -> int:
+        """
+        Returns the number of sources of this InferenceModel (at least 1).
+        """
+        return len(self.config.config_encoders)
 
     def initialize(self, max_input_length: int, get_max_output_length_function: Callable):
         """
@@ -174,7 +182,7 @@ class InferenceModel(model.SockeyeModel):
             # multisource_words => (num_samples, num_sources, max(source_len))
             multisource_length = utils.compute_lengths(multisource_words)
             # multisource_length => (num_samples, num_sources)
-            multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True, name='multisource_length')
+            multisource_length = multisource_length.split(num_outputs=self.num_sources, axis=1, squeeze_axis=True, name='multisource_length')
             # multisource_length => [(num_samples) x num_sources]
 
             # source embedding
@@ -236,8 +244,8 @@ class InferenceModel(model.SockeyeModel):
             computation, controlled by decoder_return_logit_inputs
             """
             source_seq_len, decode_step = bucket_key
-            source_embed_seq_len = self.embedding_source.get_encoded_seq_len(source_seq_len)
-            source_encoded_seq_len = self.encoder.get_encoded_seq_len(source_embed_seq_len)
+            source_embed_seq_len = self.embedding_source[0].get_encoded_seq_len(source_seq_len)
+            source_encoded_seq_len = self.encoder[0].get_encoded_seq_len(source_embed_seq_len)
 
             self.decoder.reset()
             target_prev = mx.sym.Variable(C.TARGET_NAME)
@@ -305,9 +313,9 @@ class InferenceModel(model.SockeyeModel):
         return [mx.io.DataDesc(name=C.TARGET_NAME, shape=(self.batch_size * self.beam_size,),
                                layout="NT")] + self.decoder.state_shapes(self.batch_size * self.beam_size,
                                                                          target_max_length,
-                                                                         self.encoder.get_encoded_seq_len(
+                                                                         self.encoder[0].get_encoded_seq_len(
                                                                              source_max_length),
-                                                                         self.encoder.get_num_hidden())
+                                                                         self.encoder[0].get_num_hidden())
 
     def run_encoder(self,
                     source: mx.nd.NDArray,
@@ -365,7 +373,7 @@ class InferenceModel(model.SockeyeModel):
     @property
     def max_supported_seq_len_source(self) -> Optional[int]:
         """ If not None this is the maximally supported source length during inference (hard constraint). """
-        return self.encoder.get_max_seq_len()
+        return self.encoder[0].get_max_seq_len()
 
     @property
     def max_supported_seq_len_target(self) -> Optional[int]:
@@ -399,7 +407,7 @@ def load_models(context: mx.context.Context,
                 override_dtype: Optional[str] = None,
                 output_scores: bool = False,
                 sampling: bool = False) -> Tuple[List[InferenceModel],
-                                                 List[vocab.Vocab],
+                                                 List[List[vocab.Vocab]],
                                                  vocab.Vocab]:
     """
     Loads a list of models for inference.
@@ -428,7 +436,7 @@ def load_models(context: mx.context.Context,
     logger.info("Loading %d model(s) from %s ...", len(model_folders), model_folders)
     load_time_start = time.time()
     models = []  # type: List[InferenceModel]
-    source_vocabs = []  # type: List[List[vocab.Vocab]]
+    source_vocabs = []  # type: List[List[List[vocab.Vocab]]]
     target_vocabs = []  # type: List[vocab.Vocab]
 
     if checkpoints is None:
@@ -444,7 +452,7 @@ def load_models(context: mx.context.Context,
 
     for model_folder, checkpoint in zip(model_folders, checkpoints):
         model_source_vocabs = vocab.load_source_vocabs(model_folder)
-        model_target_vocab = vocab.load_target_vocab(model_folder)
+        model_target_vocab  = vocab.load_target_vocab(model_folder)
         source_vocabs.append(model_source_vocabs)
         target_vocabs.append(model_target_vocab)
 
@@ -453,7 +461,8 @@ def load_models(context: mx.context.Context,
         utils.check_version(model_version)
         model_config = model.SockeyeModel.load_config(os.path.join(model_folder, C.CONFIG_NAME))
         if override_dtype is not None:
-            model_config.config_encoder.dtype = override_dtype
+            for config in model_config.config_encoders:
+                config.dtype = override_dtype
             model_config.config_decoder.dtype = override_dtype
             if override_dtype == C.DTYPE_FP16:
                 logger.warning('Experimental feature \'override_dtype=float16\' has been used. '
@@ -474,17 +483,22 @@ def load_models(context: mx.context.Context,
                                          decoder_return_logit_inputs=decoder_return_logit_inputs,
                                          cache_output_layer_w_b=cache_output_layer_w_b,
                                          skip_softmax=skip_softmax)
-        utils.check_condition(inference_model.num_source_factors == len(model_source_vocabs),
+        # TODO: Sam check that we have the correct number of sources.
+        utils.check_condition(inference_model.num_sources == len(model_source_vocabs),
+                'Unexpected number of sources in your inference model')
+        utils.check_condition(all(inference_model.num_source_factors == len(voc) for voc in model_source_vocabs),
                               "Number of loaded source vocabularies (%d) does not match "
                               "number of source factors for model '%s' (%d)" % (len(model_source_vocabs), model_folder,
                                                                                 inference_model.num_source_factors))
         models.append(inference_model)
 
     utils.check_condition(vocab.are_identical(*target_vocabs), "Target vocabulary ids do not match")
-    first_model_vocabs = source_vocabs[0]
-    for fi in range(len(first_model_vocabs)):
-        utils.check_condition(vocab.are_identical(*[source_vocabs[i][fi] for i in range(len(source_vocabs))]),
-                              "Source vocabulary ids do not match. Factor %d" % fi)
+    # source_vocabs.shape: #models x #source x #factor
+    # Will iterate source_vocabs in #source x #factor x #models
+    for s, source in enumerate(zip(*l) for l in zip(*source_vocabs)):
+        for f, factor in enumerate(source):
+            utils.check_condition(vocab.are_identical(*factor),
+                              "Source (%d) vocabulary ids do not match. Factor %d" % (s, f))
 
     source_with_eos = models[0].source_with_eos
     utils.check_condition(all(source_with_eos == m.source_with_eos for m in models),
@@ -1722,9 +1736,9 @@ class Translator:
         """
 
         # Length of encoded sequence (may differ from initial input length)
-        encoded_source_length = self.models[0].encoder.get_encoded_seq_len(source_length)
+        encoded_source_length = self.models[0].encoder[0].get_encoded_seq_len(source_length)
         utils.check_condition(all(encoded_source_length ==
-                                  model.encoder.get_encoded_seq_len(source_length) for model in self.models),
+                                  model.encoder[0].get_encoded_seq_len(source_length) for model in self.models),
                               "Models must agree on encoded sequence length")
         # Maximum output length
         max_output_length = self.models[0].get_max_output_length(source_length)

@@ -183,10 +183,10 @@ class CheckpointDecoder:
                 C.DECODING_TIME: trans_wall_time}
 
 
-def parallel_subsample(multisource: Sequence[Sequence[str]], target: Sequence[str], sample_size: int, seed: int) -> Tuple[List[List[str]], List[str]]:
+def parallel_subsample(multisource: Sequence[Sequence[str]], target: Sequence[str], sample_size: int, seed: int) -> Tuple[List[List[List[str]]], List[str]]:
     # custom random number generator to guarantee the same samples across runs in order to be able to
     # compare metrics across independent runs
-    multisource_sample = []  # type: List[List[str]]
+    multisource_sample = []  # type: List[List[List[str]]]
     for source in multisource:
         sample = []
         for factor in source:
