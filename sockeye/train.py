@@ -225,7 +225,7 @@ def use_shared_vocab(args: argparse.Namespace) -> bool:
 
 
 def merge_with_factors(main_factor: List[str],
-        other_factors: List[List[str]]) -> List[List[str]]:
+        other_factors: List[Optional[List[Optional[str]]]]) -> List[List[str]]:
     """
     """
     multisource_with_factors = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
@@ -295,15 +295,18 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             # resuming training. Making sure the vocabs in the model and in the prepared data match up
             model_source_vocabs = vocab.load_source_vocabs(output_folder)
             for i, (v, mv) in enumerate(zip(source_vocabs, model_source_vocabs)):
-                utils.check_condition(vocab.are_identical(v, mv),
-                                      "Prepared data and resumed model source vocab %d do not match." % i)
+                for j, (f, mf) in enumerate(zip(v, mv)):
+                    utils.check_condition(vocab.are_identical(f, mf),
+                                          "Prepared data and resumed model source vocab %d.%d do not match." % (i,j))
             model_target_vocab = vocab.load_target_vocab(output_folder)
             utils.check_condition(vocab.are_identical(target_vocab, model_target_vocab),
                                   "Prepared data and resumed model target vocabs do not match.")
 
-        check_condition(data_config.num_source_factors == len(validation_multisource),
+        check_condition(len(data_config) == len(validation_multisource),
+                'Unexpected number of validation multisource (%d)' % (len(data_config), len(validation_multisource)))
+        check_condition(data_config[0].num_source_factors == len(validation_multisource[0]),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
-                            data_config.num_source_factors, len(validation_multisource)))
+                            data_config[0].num_source_factors, len(validation_multisource[0])))
 
         return train_iter, validation_iter, data_config, source_vocabs, target_vocab
 
@@ -314,12 +317,12 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
         if resume_training:
             # Load the existing vocabs created when starting the training run.
             source_vocabs = vocab.load_source_vocabs(output_folder)
-            target_vocab = vocab.load_target_vocab(output_folder)
+            target_vocab  = vocab.load_target_vocab(output_folder)
 
             # Recover the vocabulary path from the data info file:
             data_info = cast(data_io.DataInfo, Config.load(os.path.join(output_folder, C.DATA_INFO)))
             source_vocab_paths = data_info.source_vocabs
-            target_vocab_path = data_info.target_vocab
+            target_vocab_path  = data_info.target_vocab
 
         else:
             # Load or create vocabs

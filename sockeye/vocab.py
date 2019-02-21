@@ -18,8 +18,9 @@ import os
 from collections import Counter
 from contextlib import ExitStack
 from itertools import chain, islice, groupby
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Sequence, Any
 
+from . import arguments
 from . import constants as C
 from . import log
 from . import utils
@@ -217,9 +218,9 @@ def load_or_create_vocab(data: str, vocab_path: Optional[str], num_words: int, w
         return vocab_from_json(vocab_path)
 
 
-def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
-                          source_factor_and_vocab_paths:  List[List[Tuple[str,str]]],
-                          target_and_vocab_path: Tuple[str,str],
+def load_or_create_vocabs(source_and_vocab_path: Sequence[Any],
+                          source_factor_and_vocab_paths:  Sequence[Sequence[Any]],
+                          target_and_vocab_path: Any,
                           shared_vocab: bool,
                           num_words_source: Optional[int], word_min_count_source: int,
                           num_words_target: Optional[int], word_min_count_target: int,
@@ -254,43 +255,55 @@ def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
     logger.info("=============================")
     logger.info("(1) Surface form vocabularies (source & target)")
 
+    from pudb import set_trace; set_trace()
     if shared_vocab:
-        if source_vocab_path and target_vocab_path:
-            vocab_source = vocab_from_json(source_vocab_path)
-            vocab_target = vocab_from_json(target_vocab_path)
-            utils.check_condition(are_identical(vocab_source, vocab_target),
+        if all(path.vocab is not None for path in source_and_vocab_path) and target_and_vocab_path.vocab:
+            vocab_sources = [ vocab_from_json(path.vocab) for path in source_and_vocab_path ]
+            vocab_target = vocab_from_json(target_and_vocab_path.vocab)
+            utils.check_condition(all(are_identical(vocab_source, vocab_target) for vocab_source in vocab_sources),
                                   "Shared vocabulary requires identical source and target vocabularies. "
-                                  "The vocabularies in %s and %s are not identical." % (source_vocab_path,
-                                                                                        target_vocab_path))
+                                  "The vocabularies in %s and %s are not identical." 
+                                  % (':'.join(p.vocab for p in source_vocab_path), target_vocab_path.vocab))
 
-        elif source_vocab_path is None and target_vocab_path is None:
+        elif all(path.vocab is None for path in source_vocab_path) and target_and_vocab_path.vocab is None:
             utils.check_condition(num_words_source == num_words_target,
                                   "A shared vocabulary requires the number of source and target words to be the same.")
             utils.check_condition(word_min_count_source == word_min_count_target,
                                   "A shared vocabulary requires the minimum word count for source and target "
                                   "to be the same.")
-            vocab_source = vocab_target = build_from_paths(paths=[source_path, target_path],
+            vocab_target = build_from_paths(paths=[ p.corpus for p in source_and_vocab_path] + [target_and_vocab_path.corpus],
                                                            num_words=num_words_source,
                                                            min_count=word_min_count_source,
                                                            pad_to_multiple_of=pad_to_multiple_of)
+            vocab_sources = [vocab_target] * len(source_and_vocab_path)
 
         else:
-            vocab_path = source_vocab_path if source_vocab_path is not None else target_vocab_path
-            logger.info("Using %s as a shared source/target vocabulary." % vocab_path)
-            vocab_source = vocab_target = vocab_from_json(vocab_path)
+            if target_and_vocab_path.vocab is not None:
+                logger.info("Using %s as a shared source/target vocabulary." % target_and_vocab_path.vocab)
+                vocab_target = vocab_from_json(target_and_vocab_path.vocab)
+                vocab_sources = [vocab_target] * len(source_and_vocab_path)
+            else:
+                paths = ':'.join(p.vocab for p in source_vocab_path)
+                logger.info("Using %s as a shared source/target vocabulary." % paths)
+                vocab_sources = [ vocab_from_json(path.vocab) for path in source_and_vocab_path ]
+                utils.check_condition(all(are_identical(vocab_source, vocab_sources[0]) for vocab_source in vocab_sources),
+                                      "Shared vocabulary requires identical source and target vocabularies. "
+                                      "The vocabularies in %s are not identical." 
+                                      % paths)
+                vocab_target = vocab_sources[0]
 
     else:
         vocab_sources = [ load_or_create_vocab(
-            path,
+            corpus_path,
             vocab_path,
             num_words_source,
             word_min_count_source,
             pad_to_multiple_of=pad_to_multiple_of)
-            for (path, vocab_path) in source_and_vocab_path ]
+            for (corpus_path, vocab_path) in source_and_vocab_path ]
 
         vocab_target = load_or_create_vocab(
-                target_and_vocab_path[0],
-                target_and_vocab_path[1],
+                target_and_vocab_path.corpus,
+                target_and_vocab_path.vocab,
                 num_words_target,
                 word_min_count_target,
                 pad_to_multiple_of=pad_to_multiple_of)
@@ -300,10 +313,8 @@ def load_or_create_vocabs(source_and_vocab_path: List[Tuple[str,str]],
         logger.info("(2) Additional source factor vocabularies")
         # source factor vocabs are always created
         vocab_source_factors = [ 
-                [ load_or_create_vocab(factor_path,
-                    factor_vocab_path,
-                    num_words_source,
-                    word_min_count_source) for (factor_path, factor_vocab_path) in source_factor_and_vocab_path ]
+                [ load_or_create_vocab(path.corpus, path.vocab, num_words_source, word_min_count_source)
+                    for path in source_factor_and_vocab_path ]
                 for source_factor_and_vocab_path in source_factor_and_vocab_paths ]
 
     return [ [vocab_source] + vocab_source_factor for (vocab_source, vocab_source_factor) in zip(vocab_sources, vocab_source_factors) ], vocab_target
