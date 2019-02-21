@@ -16,8 +16,9 @@ import json
 import logging
 import os
 from collections import Counter
+from collections import namedtuple
 from contextlib import ExitStack
-from itertools import chain, islice, groupby
+from itertools import chain, islice, groupby, zip_longest
 from typing import Dict, Iterable, List, Optional, Tuple, Sequence, Any
 
 from . import arguments
@@ -30,6 +31,27 @@ logger = logging.getLogger(__name__)
 
 Vocab = Dict[str, int]
 InverseVocab = Dict[int, str]
+
+CorpusVocabPaths = namedtuple('CorpusVocabPaths', ('corpus', 'vocab'))
+
+def tie_corpora_with_vocab(source: Sequence[str],
+                           source_vocab: Sequence[str],
+                           source_factors: Sequence[Sequence[str]],
+                           source_factor_vocabs: Sequence[Sequence[str]],
+                           target: str,
+                           target_vocab: str) -> Tuple[Sequence[CorpusVocabPaths], Sequence[Sequence[CorpusVocabPaths]], CorpusVocabPaths]:
+    source_and_vocab_path = tuple(CorpusVocabPaths(corpus, vocab)
+            for corpus, vocab in zip_longest(source, source_vocab, fillvalue=None))
+
+    source_factor_and_vocab_path = tuple(
+            tuple(
+                CorpusVocabPaths(corpus, vocab)
+                for corpus, vocab in zip_longest(factor_paths, factor_vocab_paths, fillvalue=None)
+                )
+            for factor_paths, factor_vocab_paths in zip_longest(source_factors, source_factor_vocabs, fillvalue=[]) )
+
+    return source_and_vocab_path, source_factor_and_vocab_path, CorpusVocabPaths(target, target_vocab)
+
 
 
 def build_from_paths(paths: List[str], num_words: Optional[int] = None, min_count: int = 1,
@@ -218,9 +240,12 @@ def load_or_create_vocab(data: str, vocab_path: Optional[str], num_words: int, w
         return vocab_from_json(vocab_path)
 
 
-def load_or_create_vocabs(source_and_vocab_path: Sequence[Any],
-                          source_factor_and_vocab_paths:  Sequence[Sequence[Any]],
-                          target_and_vocab_path: Any,
+def load_or_create_vocabs(source: Sequence[str],
+                          source_vocab: Sequence[str],
+                          source_factors: Sequence[Sequence[str]],
+                          source_factor_vocabs: Sequence[Sequence[str]],
+                          target: str,
+                          target_vocab: str,
                           shared_vocab: bool,
                           num_words_source: Optional[int], word_min_count_source: int,
                           num_words_target: Optional[int], word_min_count_target: int,
@@ -254,6 +279,11 @@ def load_or_create_vocabs(source_and_vocab_path: Sequence[Any],
     logger.info("Loading/creating vocabularies")
     logger.info("=============================")
     logger.info("(1) Surface form vocabularies (source & target)")
+
+    source_and_vocab_path, source_factor_and_vocab_paths, target_and_vocab_path = tie_corpora_with_vocab(
+                          source, source_vocab,
+                          source_factors, source_factor_vocabs,
+                          target, target_vocab)
 
     from pudb import set_trace; set_trace()
     if shared_vocab:
@@ -317,7 +347,9 @@ def load_or_create_vocabs(source_and_vocab_path: Sequence[Any],
                     for path in source_factor_and_vocab_path ]
                 for source_factor_and_vocab_path in source_factor_and_vocab_paths ]
 
-    return [ [vocab_source] + vocab_source_factor for (vocab_source, vocab_source_factor) in zip(vocab_sources, vocab_source_factors) ], vocab_target
+    multisource_vocabs = [ [vocab_source] + vocab_source_factor for (vocab_source, vocab_source_factor) in zip(vocab_sources, vocab_source_factors) ]
+
+    return multisource_vocabs, vocab_target
 
 
 def reverse_vocab(vocab: Vocab) -> InverseVocab:

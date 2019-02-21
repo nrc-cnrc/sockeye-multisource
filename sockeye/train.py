@@ -333,15 +333,18 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             target_vocab_path  = args.target_vocab
 
             source_vocabs, target_vocab = vocab.load_or_create_vocabs(
-                source_and_vocab_path=args.source_and_vocab_path,
-                source_factor_and_vocab_paths=args.source_factor_and_vocab_path,
-                target_and_vocab_path=args.target_and_vocab_path,
-                shared_vocab=shared_vocab,
-                num_words_source=num_words_source,
-                num_words_target=num_words_target,
-                word_min_count_source=word_min_count_source,
-                word_min_count_target=word_min_count_target,
-                pad_to_multiple_of=args.pad_vocab_to_multiple_of)
+                    source = args.source,
+                    source_vocab = args.source_vocab,
+                    source_factors = args.source_factors,
+                    source_factor_vocabs = args.source_factor_vocabs,
+                    target = args.target,
+                    target_vocab = args.target_vocab,
+                    shared_vocab=shared_vocab,
+                    num_words_source=num_words_source,
+                    num_words_target=num_words_target,
+                    word_min_count_source=word_min_count_source,
+                    word_min_count_target=word_min_count_target,
+                    pad_to_multiple_of=args.pad_vocab_to_multiple_of)
 
         # If factors are being added instead of concatenated, set all dimensions to the embedding dimensions
         if args.source_factors_combine == C.SOURCE_FACTORS_COMBINE_SUM:
@@ -809,7 +812,6 @@ def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
     args = params.parse_args()
-    arguments.tie_corpora_with_vocab(args)
     train(args)
 
 
