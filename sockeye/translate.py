@@ -73,6 +73,7 @@ def run_translate(args: argparse.Namespace):
                                     exit_stack=exit_stack)[0]
         logger.info("Translate Device: %s", context)
 
+        from pudb import set_trace; set_trace()
         models, source_vocabs, target_vocab = inference.load_models(
             context=context,
             max_input_len=args.max_input_len,
@@ -87,10 +88,12 @@ def run_translate(args: argparse.Namespace):
             override_dtype=args.override_dtype,
             output_scores=output_handler.reports_score(),
             sampling=args.sample)
+
         restrict_lexicon = None  # type: Optional[TopKLexicon]
         if args.restrict_lexicon:
             restrict_lexicon = TopKLexicon(source_vocabs[0], target_vocab)
             restrict_lexicon.load(args.restrict_lexicon, k=args.restrict_lexicon_topk)
+
         store_beam = args.output_type == C.OUTPUT_HANDLER_BEAM_STORE
         translator = inference.Translator(context=context,
                                           ensemble_mode=args.ensemble_mode,
@@ -109,6 +112,7 @@ def run_translate(args: argparse.Namespace):
                                           strip_unknown_words=args.strip_unknown_words,
                                           skip_topk=args.skip_topk,
                                           sample=args.sample)
+
         read_and_translate(translator=translator,
                            output_handler=output_handler,
                            chunk_size=args.chunk_size,

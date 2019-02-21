@@ -79,6 +79,10 @@ class ModelConfig(Config):
             raise RuntimeError("weight_tying_type must be specified when using weight_tying.")
         self.lhuc = lhuc
 
+    @property
+    def num_source(self) -> int:
+        return len(self.config_encoders)
+
 
 class SockeyeModel:
     """

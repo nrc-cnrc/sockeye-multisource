@@ -723,6 +723,12 @@ class EncoderSequence(Encoder):
         super().__init__(dtype)
         self.encoders = encoders
 
+    def __str__(self):
+        return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
+    def __repr__(self):
+        return "EncoderSequence[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     def encode(self,
                data: mx.sym.Symbol,
                data_length: mx.sym.Symbol,

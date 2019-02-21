@@ -1166,6 +1166,7 @@ def add_inference_args(params):
     decode_params = params.add_argument_group("Inference parameters")
 
     decode_params.add_argument(C.INFERENCE_ARG_INPUT_LONG, C.INFERENCE_ARG_INPUT_SHORT,
+                               action='append',
                                default=None,
                                help='Input file to translate. One sentence per line. '
                                     'If not given, will read from stdin.')
@@ -1174,10 +1175,12 @@ def add_inference_args(params):
                                required=False,
                                nargs='+',
                                type=regular_file(),
+                               action='append',
                                default=None,
                                help='List of input files containing additional source factors,'
                                     'each token-parallel to the source. Default: %(default)s.')
 
+    # TODO: Sam handle multisource json input
     decode_params.add_argument('--json-input',
                                action='store_true',
                                default=False,

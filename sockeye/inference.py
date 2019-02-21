@@ -84,6 +84,7 @@ class InferenceModel(model.SockeyeModel):
 
         self.batch_size = batch_size
         self.softmax_temperature = softmax_temperature
+        from pudb import set_trace; set_trace()
         self.max_input_length, self.get_max_output_length = models_max_input_output_length([self],
                                                                                            max_output_length_num_stds,
                                                                                            forced_max_output_len=forced_max_output_len)
@@ -174,6 +175,9 @@ class InferenceModel(model.SockeyeModel):
         def sym_gen(multisource_seq_len: int):
             source = mx.sym.Variable(C.SOURCE_NAME)
             # source => (num_samples, num_sources, max(source_len), num_factors)
+            multisource = source.split(num_outputs=self.num_sources,
+                                       axis=1, squeeze_axis=True, name='multisource_batches')
+            # multisource => [(num_samples, max(source_len), num_factors) X num_sources]
             multisource_words = source.split(
                     num_outputs=self.num_source_factors,
                     axis=3,
@@ -363,17 +367,21 @@ class InferenceModel(model.SockeyeModel):
     @property
     def training_max_seq_len_source(self) -> int:
         """ The maximum sequence length on the source side during training. """
-        return self.config.config_data.data_statistics.max_observed_len_source
+        return max(stats.max_observed_len_source for stats in self.config.config_data.data_statistics)
 
     @property
     def training_max_seq_len_target(self) -> int:
         """ The maximum sequence length on the target side during training. """
-        return self.config.config_data.data_statistics.max_observed_len_target
+        return max(stats.max_observed_len_target for stats in self.config.config_data.data_statistics)
 
     @property
     def max_supported_seq_len_source(self) -> Optional[int]:
         """ If not None this is the maximally supported source length during inference (hard constraint). """
-        return self.encoder[0].get_max_seq_len()
+        seq_lens = [ _encoder.get_max_seq_len() for _encoder in self.encoder ]
+        if all(seq_len is None for seq_len in seq_lens):
+            return None
+        else:
+            return max(filter(lambda x: x is not None, seq_lens))
 
     @property
     def max_supported_seq_len_target(self) -> Optional[int]:
@@ -382,11 +390,12 @@ class InferenceModel(model.SockeyeModel):
 
     @property
     def length_ratio_mean(self) -> float:
-        return self.config.config_data.data_statistics.length_ratio_mean
+        # TODO: Sam what is the proper length ratio to return when we have multiple sources.
+        return self.config.config_data.data_statistics[0].length_ratio_mean
 
     @property
     def length_ratio_std(self) -> float:
-        return self.config.config_data.data_statistics.length_ratio_std
+        return self.config.config_data.data_statistics[0].length_ratio_std
 
     @property
     def source_with_eos(self) -> bool:
