@@ -699,7 +699,7 @@ def create_model_config(args: argparse.Namespace,
                                      weight_tying_type=args.weight_tying_type if args.weight_tying else None,
                                      weight_normalization=args.weight_normalization,
                                      lhuc=args.lhuc is not None)
-    # Debugging
+    # Sam Debugging
     model_config.save('model_config.yml')
     return model_config
 

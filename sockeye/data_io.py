@@ -53,6 +53,8 @@ def define_buckets(max_seq_len: int, step=10) -> List[int]:
     return buckets
 
 
+# TODO: Sam max_seq_len_source should allow a Tuple[Int, ...], aka different
+# length for different source in the multisource.
 def define_multisource_parallel_buckets(max_seq_len_source: int,
                             max_seq_len_target: int,
                             bucket_width: int = 10,
@@ -74,7 +76,7 @@ def define_multisource_parallel_buckets(max_seq_len_source: int,
 def define_parallel_buckets(max_seq_len_source: int,
                             max_seq_len_target: int,
                             bucket_width: int = 10,
-                            length_ratio: float = 1.0):
+                            length_ratio: float = 1.0) -> List[Tuple[int, int]]:
     """
     Returns (source, target) buckets up to (max_seq_len_source, max_seq_len_target).  The longer side of the data uses
     steps of bucket_width while the shorter side uses steps scaled down by the average target/source length ratio.  If
@@ -111,7 +113,7 @@ def define_parallel_buckets(max_seq_len_source: int,
 
 
 def define_empty_source_parallel_buckets(max_seq_len_target: int,
-                                         bucket_width: int = 10) -> List[Tuple[int, int]]:
+                                         bucket_width: int = 10) -> List[Tuple[int, ...]]:
     """
     Returns (source, target) buckets up to (None, max_seq_len_target). The source
     is empty since it is supposed to not contain data that can be bucketized.
@@ -146,6 +148,7 @@ def get_bucket(seq_len: int, buckets: List[int]) -> Optional[int]:
     return buckets[bucket_idx]
 
 
+# TODO: If BucketBatchSize is read-only, shouldn't be a namedtuple instead?
 class BucketBatchSize:
     """
     :param bucket: The corresponding bucket.
@@ -153,7 +156,7 @@ class BucketBatchSize:
     :param average_words_per_batch: Approximate number of non-padding tokens in each batch.
     """
 
-    def __init__(self, bucket: Tuple[int, int], batch_size: int, average_words_per_batch: float) -> None:
+    def __init__(self, bucket: Tuple[int, ...], batch_size: int, average_words_per_batch: float) -> None:
         self.bucket = bucket
         self.batch_size = batch_size
         self.average_words_per_batch = average_words_per_batch
@@ -166,7 +169,7 @@ class BucketBatchSize:
 
 
 
-def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
+def define_bucket_batch_sizes(buckets: List[Tuple[int, ...]],
                               batch_size: int,
                               batch_by_words: bool,
                               batch_num_devices: int,
@@ -232,24 +235,25 @@ def define_bucket_batch_sizes(buckets: List[Tuple[int, int]],
     return bucket_batch_sizes
 
 
-def calculate_length_statistics(source_iterables: Sequence[Sequence[Iterable[Any]]],
+def calculate_length_statistics(multisource_iterables: Sequence[Sequence[Iterable[Any]]],
                                 target_iterable: Iterable[Any],
                                 max_seq_len_source: int,
                                 max_seq_len_target: int) -> List['LengthStatistics']:
     """
     Returns mean and standard deviation of target-to-source length ratios of parallel corpus.
 
-    :param source_iterables: Source sequence readers.
+    :param multisource_iterables: Source sequence readers.
     :param target_iterable: Target sequence reader.
     :param max_seq_len_source: Maximum source sequence length.
     :param max_seq_len_target: Maximum target sequence length.
     :return: The number of sentences as well as the mean and standard deviation of target to source length ratios.
     """
-    mean_and_variances = [ OnlineMeanAndVariance() for _ in range(len(source_iterables)) ]
+    mean_and_variances = [ OnlineMeanAndVariance() for _ in range(len(multisource_iterables)) ]
 
-    for sources, target in parallel_iter(source_iterables, target_iterable):
+    for sources, target in parallel_iter(multisource_iterables, target_iterable):
         target_len = len(target)
-        if any(len(source[0]) > max_seq_len_source for source in sources) or target_len > max_seq_len_target:
+        # factors for a given source should all be of the same length, thus we only check if the first factor is too long.
+        if any(len(factors[0]) > max_seq_len_source for factors in sources) or target_len > max_seq_len_target:
             continue
 
         for source, mean_and_variance in zip(sources, mean_and_variances):
@@ -298,7 +302,7 @@ def are_token_parallel(sequences: Sequence[Sequence[Sized]]) -> bool:
     """
     Returns True if all sequences in the list have the same length.
     """
-    def per_source(sequence: Sized) -> bool:
+    def per_source(sequence: Sequence[Sized]) -> bool:
         if not sequence or len(sequence) == 1:
             return True
         return all(len(factor) == len(sequence[0]) for factor in sequence)
@@ -309,7 +313,7 @@ def are_token_parallel(sequences: Sequence[Sequence[Sized]]) -> bool:
 class DataStatisticsAccumulator:
 
     def __init__(self,
-                 buckets: List[Tuple[int, int]],
+                 buckets: List[Tuple[int, ...]],
                  vocab_source: Optional[Dict[str, int]],
                  vocab_target: Dict[str, int],
                  length_ratio_mean: float,
@@ -396,7 +400,7 @@ def shard_data(source_fnames: List[str],
                source_vocabs: List[vocab.Vocab],
                target_vocab: vocab.Vocab,
                num_shards: int,
-               buckets: List[Tuple[int, int]],
+               buckets: List[Tuple[int, ...]],
                length_ratio_mean: float,
                length_ratio_std: float,
                output_prefix: str) -> Tuple[List[Tuple[List[str], str, 'DataStatistics']], 'DataStatistics']:
@@ -573,9 +577,9 @@ def get_num_shards(num_samples: int, samples_per_shard: int, min_num_shards: int
     return max(int(math.ceil(num_samples / samples_per_shard)), min_num_shards)
 
 
-def prepare_data(source_fnames: List[str],
+def prepare_data(source_fnames: List[List[str]],
                  target_fname: str,
-                 source_vocabs: List[vocab.Vocab],
+                 source_vocabs: List[List[vocab.Vocab]],
                  target_vocab: vocab.Vocab,
                  source_vocab_paths: List[Optional[str]],
                  target_vocab_path: Optional[str],
@@ -669,7 +673,7 @@ def prepare_data(source_fnames: List[str],
 
 def get_data_statistics(source_readers: Optional[Sequence[Iterable]],
                         target_reader: Iterable,
-                        buckets: List[Tuple[int, int]],
+                        buckets: List[Tuple[int, ...]],
                         length_ratio_mean: List[float],
                         length_ratio_std: List[float],
                         source_vocabs: Optional[List[List[vocab.Vocab]]],
@@ -975,6 +979,7 @@ def get_training_data_iters(multisource_with_factors: List[List[str]],
     return train_iter, validation_iter, config_data, data_info
 
 
+# TODO: Sam: Should this class also be a namedtuple if it is read-only?
 class LengthStatistics(config.Config):
 
     def __init__(self,
@@ -1008,7 +1013,7 @@ class DataStatistics(config.Config):
                  size_vocab_target,
                  length_ratio_mean,
                  length_ratio_std,
-                 buckets: List[Tuple[int, int]],
+                 buckets: List[Tuple[int, ...]],
                  num_sents_per_bucket: List[int],
                  mean_len_target_per_bucket: List[Optional[float]]) -> None:
         super().__init__()
@@ -1322,7 +1327,7 @@ class FileListReader(Iterator):
         return os.path.join(self.path, fname)
 
 
-def get_default_bucket_key(buckets: List[Tuple[int, int]]) -> Tuple[int, int]:
+def get_default_bucket_key(buckets: List[Tuple[int, ...]]) -> Tuple[int, ...]:
     """
     Returns the default bucket from a list of buckets, i.e. the largest bucket.
 
@@ -1334,7 +1339,7 @@ def get_default_bucket_key(buckets: List[Tuple[int, int]]) -> Tuple[int, int]:
 
 def get_parallel_bucket(buckets: List[Tuple[int, int]],
                         length_source: List[int],
-                        length_target: int) -> Tuple[Optional[int], Optional[Tuple[int, int]]]:
+                        length_target: int) -> Tuple[Optional[int], Optional[Tuple[int, ...]]]:
     """
     Returns bucket index and bucket from a list of buckets, given source and target length.
     Returns (None, None) if no bucket fits.
@@ -1352,8 +1357,8 @@ def get_parallel_bucket(buckets: List[Tuple[int, int]],
     return None, None
 
 
-def get_target_bucket(buckets: List[Tuple[int, int]],
-                      length_target: int) -> Optional[Tuple[int, Tuple[int, int]]]:
+def get_target_bucket(buckets: List[Tuple[int, ...]],
+                      length_target: int) -> Optional[Tuple[int, Tuple[int, ...]]]:
     """
     Returns bucket index and bucket from a list of buckets, given source and target length.
     Returns (None, None) if no bucket fits.
@@ -1362,8 +1367,8 @@ def get_target_bucket(buckets: List[Tuple[int, int]],
     :param length_target: Length of target sequence.
     :return: Tuple of (bucket index, bucket), or (None, None) if not fitting.
     """
-    bucket = None, None  # type: Tuple[int, Tuple[int, int]]
-    for j, (source_bkt, target_bkt) in enumerate(buckets):
+    bucket = None, None  # type: Tuple[int, Tuple[int, ...]]
+    for j, (*source_bkt, target_bkt) in enumerate(buckets):
         if target_bkt >= length_target:
             bucket = j, (source_bkt, target_bkt)
             break
@@ -1578,7 +1583,7 @@ class BaseParallelSampleIter(mx.io.DataIter):
     __metaclass__ = MetaBaseParallelSampleIter
 
     def __init__(self,
-                 buckets: List[Tuple[int, int]],
+                 buckets: List[Tuple[int, ...]],
                  batch_size: int,
                  bucket_batch_sizes: List[BucketBatchSize],
                  source_data_name: str,

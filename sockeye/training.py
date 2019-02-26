@@ -64,7 +64,7 @@ class TrainingModel(model.SockeyeModel):
                  output_dir: str,
                  provide_data: List[mx.io.DataDesc],
                  provide_label: List[mx.io.DataDesc],
-                 default_bucket_key: Tuple[int, int],
+                 default_bucket_key: Tuple[int, ...],
                  bucketing: bool,
                  gradient_compression_params: Optional[Dict[str, Any]] = None,
                  fixed_param_names: Optional[List[str]] = None) -> None:
@@ -80,7 +80,7 @@ class TrainingModel(model.SockeyeModel):
     def _initialize(self,
                     provide_data: List[mx.io.DataDesc],
                     provide_label: List[mx.io.DataDesc],
-                    default_bucket_key: Tuple[int, int]):
+                    default_bucket_key: Tuple[int, ...]):
         """
         Initializes model components, creates training symbol and module, and binds it.
         """

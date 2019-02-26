@@ -133,8 +133,8 @@ class SockeyeModel:
         # multisource projection
         # TODO: Sam Where is the model size?
         #from pudb import set_trace; set_trace()
-        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(config_encoder.model_size for config_encoder in self.config.config_encoders),
-                                               vocab_size=self.config.config_decoder.model_size,
+        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoder),
+                                               vocab_size=self.decoder.get_num_hidden(),
                                                weight = None,
                                                weight_normalization=self.config.weight_normalization,
                                                prefix=self.prefix + 'multisource_embedding_projection')

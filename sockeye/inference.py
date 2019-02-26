@@ -99,6 +99,9 @@ class InferenceModel(model.SockeyeModel):
         self.output_layer_w = None  # type: Optional[mx.nd.NDArray]
         self.output_layer_b = None  # type: Optional[mx.nd.NDArray]
 
+    def __repr__(self):
+        return "InferenceModel[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     @property
     def num_source_factors(self) -> int:
         """
@@ -140,6 +143,7 @@ class InferenceModel(model.SockeyeModel):
                                   "ratio observed during training." % (self.max_supported_seq_len_target,
                                                                        decoder_max_len))
 
+        from pudb import set_trace; set_trace()
         self.encoder_module, self.encoder_default_bucket_key = self._get_encoder_module()
         self.decoder_module, self.decoder_default_bucket_key = self._get_decoder_module()
 
@@ -172,6 +176,14 @@ class InferenceModel(model.SockeyeModel):
         :return: Tuple of encoder module and default bucket key.
         """
 
+        # TODO: Sam shouldn't I be getting multisource_seq_len: List[int] ?
+        # default_bucket_key is NOT a tuple of source length
+        #default_bucket_key = self.max_input_length
+        # Inference differs from training, it doesn't require the target
+        # length, just the sources' length.
+        #module = mx.mod.BucketingModule(sym_gen=sym_gen,
+        #                                default_bucket_key=default_bucket_key,
+        #                                context=self.context)
         def sym_gen(multisource_seq_len: int):
             source = mx.sym.Variable(C.SOURCE_NAME)
             # source => (num_samples, num_sources, max(source_len), num_factors)
@@ -191,10 +203,14 @@ class InferenceModel(model.SockeyeModel):
 
             # source embedding
             # (source_embed, source_embed_length, source_embed_seq_len)
-            assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
+            #assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
+            #multisource_embeds = [
+            #   embedder.encode(source, source_length, seq_len)
+            #   for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
+            assert len(self.embedding_source) == len(multisource) == len(multisource_length)
             multisource_embeds = [
-               embedder.encode(source, source_length, seq_len)
-               for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
+               embedder.encode(source, source_length, multisource_seq_len)
+               for embedder, source, source_length in zip(self.embedding_source, multisource, multisource_length) ]
 
             # encoder
             # source_encoded: (batch_size, source_encoded_length, encoder_depth)
@@ -302,7 +318,7 @@ class InferenceModel(model.SockeyeModel):
         :return: List of data descriptions.
         """
         return [mx.io.DataDesc(name=C.SOURCE_NAME,
-                               shape=(self.batch_size, bucket_key, self.num_source_factors),
+                               shape=(self.batch_size, self.num_sources, bucket_key, self.num_source_factors),
                                layout=C.BATCH_MAJOR)]
 
     @lru_cache(maxsize=None)
@@ -378,10 +394,7 @@ class InferenceModel(model.SockeyeModel):
     def max_supported_seq_len_source(self) -> Optional[int]:
         """ If not None this is the maximally supported source length during inference (hard constraint). """
         seq_lens = [ _encoder.get_max_seq_len() for _encoder in self.encoder ]
-        if all(seq_len is None for seq_len in seq_lens):
-            return None
-        else:
-            return max(filter(lambda x: x is not None, seq_lens))
+        return max(filter(lambda x: x is not None, seq_lens), default=None)
 
     @property
     def max_supported_seq_len_target(self) -> Optional[int]:
@@ -440,7 +453,7 @@ def load_models(context: mx.context.Context,
            log probabilities. If False, scores will be negative, raw logit activations if decoding with beam size 1
            and a single model.
     :param sampling: True if the model is sampling instead of doing normal topk().
-    :return: List of models, source vocabulary, target vocabulary, source factor vocabularies.
+    :return: List of models, source vocabulary, target vocabulary
     """
     logger.info("Loading %d model(s) from %s ...", len(model_folders), model_folders)
     load_time_start = time.time()
@@ -526,6 +539,7 @@ def load_models(context: mx.context.Context,
     load_time = time.time() - load_time_start
     logger.info("%d model(s) loaded in %.4fs", len(models), load_time)
     return models, source_vocabs[0], target_vocabs[0]
+    #return models, list(voc[0] for voc in source_vocabs), target_vocabs[0]
 
 
 def models_max_input_output_length(models: List[InferenceModel],
@@ -1232,7 +1246,7 @@ class Translator:
                  beam_prune: float,
                  beam_search_stop: str,
                  models: List[InferenceModel],
-                 source_vocabs: List[vocab.Vocab],
+                 source_vocabs: List[List[vocab.Vocab]],
                  target_vocab: vocab.Vocab,
                  nbest_size: int = 1,
                  restrict_lexicon: Optional[lexicon.TopKLexicon] = None,

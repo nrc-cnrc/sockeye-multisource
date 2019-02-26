@@ -121,7 +121,7 @@ def run_translate(args: argparse.Namespace):
                            input_is_json=args.json_input)
 
 
-def make_inputs(input_file: Optional[str],
+def make_inputs(input_file: Optional[List[str]],
                 translator: inference.Translator,
                 input_is_json: bool,
                 input_factors: Optional[List[str]] = None) -> Generator[inference.TranslatorInput, None, None]:
@@ -181,7 +181,7 @@ def read_and_translate(translator: inference.Translator,
     batch_size = translator.batch_size
     if chunk_size is None:
         if translator.batch_size == 1:
-            # No batching, therefore there is not need to read segments in chunks.
+            # No batching, therefore there is no need to read segments in chunks.
             chunk_size = C.CHUNK_SIZE_NO_BATCHING
         else:
             # Get a constant number of batches per call to Translator.translate.
