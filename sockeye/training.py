@@ -141,6 +141,14 @@ class TrainingModel(model.SockeyeModel):
                embedder.encode(source, source_length, seq_len)
                for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
 
+            delme = multisource_embeds[0][0].infer_shape(source=(100,3,46,1))
+            delme = multisource_embeds[1][0].infer_shape(source=(100,3,46,1))
+            delme = multisource_embeds[2][0].infer_shape(source=(100,3,46,1))
+
+            delme = multisource_embeds[0][1].infer_shape(source=(100,3,46,1))
+            delme = multisource_embeds[1][1].infer_shape(source=(100,3,46,1))
+            delme = multisource_embeds[2][1].infer_shape(source=(100,3,46,1))
+
             # target embedding
             (target_embed,
              target_embed_length,
@@ -152,6 +160,14 @@ class TrainingModel(model.SockeyeModel):
             multisource_encoded = [
                     encoder.encode(*encoder_args)
                     for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
+
+            delme = multisource_encoded[0][0].infer_shape(source=(100,3,46,1))
+            delme = multisource_encoded[1][0].infer_shape(source=(100,3,46,1))
+            delme = multisource_encoded[2][0].infer_shape(source=(100,3,46,1))
+
+            delme = multisource_encoded[0][1].infer_shape(source=(100,3,46,1))
+            delme = multisource_encoded[1][1].infer_shape(source=(100,3,46,1))
+            delme = multisource_encoded[2][1].infer_shape(source=(100,3,46,1))
 
             # TODO: Sam what length should I be using here since not all sources have the same length?
             source_encoded_length  = multisource_encoded[0][1]
@@ -165,7 +181,9 @@ class TrainingModel(model.SockeyeModel):
                             for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
                         dim=2,
                         name='multisource_combined_embeddings')
+                delme = multisource_encoded_concat.infer_shape(source=(100,3,46,1))
                 source_encoded = self.encoder2decoder(multisource_encoded_concat)
+                delme = source_encoded.infer_shape(source=(100,3,46,1))
             else:
                 source_encoded = multisource_encoded[0][0]
 
