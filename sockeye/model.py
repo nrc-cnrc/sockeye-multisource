@@ -111,6 +111,7 @@ class SockeyeModel:
         # encoder & decoder first (to know the decoder depth)
         self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoders ]
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
+        from pudb import set_trace; set_trace()
 
         # source & target embeddings
         embed_weight_source, embed_weight_target, out_weight_target = self._get_embed_weights(self.prefix)
@@ -132,7 +133,6 @@ class SockeyeModel:
 
         # multisource projection
         # TODO: Sam Where is the model size?
-        #from pudb import set_trace; set_trace()
         self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoder),
                                                vocab_size=self.decoder.get_num_hidden(),
                                                weight = None,

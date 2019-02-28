@@ -90,15 +90,24 @@ class TrainingModel(model.SockeyeModel):
         source = mx.sym.Variable(C.SOURCE_NAME)
         # source => (num_samples, num_sources, max(source_len), num_factors)
         multisource = source.split(num_outputs=num_sources,
-                                   axis=1, squeeze_axis=True, name='multisource_batches')
+                                   axis=1,
+                                   squeeze_axis=True,
+                                   name='multisource_batches')
         # multisource => [(num_samples, max(source_len), num_factors) X num_sources]
         multisource_words = source.split(num_outputs=num_factors,
-                                    axis=3, squeeze_axis=True, name='multisource_main_factor_words')[0]
+                                    axis=3,
+                                    squeeze_axis=True,
+                                    name='multisource_main_factor_words')[0]
         # multisource_words => (num_samples, num_sources, max(source_len))
         multisource_length = utils.compute_lengths(multisource_words)
         # multisource_length => (num_samples, num_sources)
         multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True)
         # multisource_length => [(num_samples) x num_sources]
+
+        from pudb import set_trace; set_trace()
+        delme = multisource.infer_shape(source=(98, 3, 46, 1))
+        delme = multisource_words.infer_shape(source=(98, 3, 46, 1))
+        delme = multisource_length.infer_shape(source=(98, 3, 46, 1))
 
         target = mx.sym.Variable(C.TARGET_NAME)
         target_length = utils.compute_lengths(target)
@@ -124,6 +133,7 @@ class TrainingModel(model.SockeyeModel):
             """
             *multisource_seq_len, target_seq_len = seq_lens
 
+            from pudb import set_trace; set_trace()
             # source embedding
             # (source_embed, source_embed_length, source_embed_seq_len)
             assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
@@ -144,13 +154,17 @@ class TrainingModel(model.SockeyeModel):
                     for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
 
             # TODO: Sam what length should I be using here since not all sources have the same length?
-            source_encoded_length = multisource_encoded[0][1]
+            source_encoded_length  = multisource_encoded[0][1]
             source_encoded_seq_len = multisource_encoded[0][2]
 
-            if False:
+            if True:
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
-                multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
+                multisource_encoded_concat = mx.sym.concat(
+                        *[source_encoded
+                            for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
+                        dim=2,
+                        name='multisource_combined_embeddings')
                 source_encoded = self.encoder2decoder(multisource_encoded_concat)
             else:
                 source_encoded = multisource_encoded[0][0]
@@ -201,6 +215,7 @@ class TrainingModel(model.SockeyeModel):
                                         compression_params=self._gradient_compression_params,
                                         fixed_param_names=fixed_param_names)
 
+        from pudb import set_trace; set_trace()
         self.module.bind(data_shapes=provide_data,
                          label_shapes=provide_label,
                          for_training=True,
