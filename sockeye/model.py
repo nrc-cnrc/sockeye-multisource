@@ -109,9 +109,8 @@ class SockeyeModel:
         num_sources = len(self.config.config_encoders)
 
         # encoder & decoder first (to know the decoder depth)
-        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix) for config in self.config.config_encoders ]
+        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix + 'menc%d_' % i) for i, config in enumerate(self.config.config_encoders) ]
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
-        from pudb import set_trace; set_trace()
 
         # source & target embeddings
         embed_weight_source, embed_weight_target, out_weight_target = self._get_embed_weights(self.prefix)

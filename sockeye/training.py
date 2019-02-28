@@ -104,10 +104,9 @@ class TrainingModel(model.SockeyeModel):
         multisource_length = multisource_length.split(num_outputs=num_sources, axis=1, squeeze_axis=True)
         # multisource_length => [(num_samples) x num_sources]
 
-        from pudb import set_trace; set_trace()
-        delme = multisource.infer_shape(source=(98, 3, 46, 1))
-        delme = multisource_words.infer_shape(source=(98, 3, 46, 1))
-        delme = multisource_length.infer_shape(source=(98, 3, 46, 1))
+        #delme = multisource.infer_shape(source=(98, 3, 61, 1))
+        #delme = multisource_words.infer_shape(source=(98, 3, 61, 1))
+        #delme = multisource_length.infer_shape(source=(98, 3, 61, 1))
 
         target = mx.sym.Variable(C.TARGET_NAME)
         target_length = utils.compute_lengths(target)
@@ -133,7 +132,6 @@ class TrainingModel(model.SockeyeModel):
             """
             *multisource_seq_len, target_seq_len = seq_lens
 
-            from pudb import set_trace; set_trace()
             # source embedding
             # (source_embed, source_embed_length, source_embed_seq_len)
             assert len(self.embedding_source) == len(multisource) == len(multisource_length) == len(multisource_seq_len)
@@ -141,13 +139,13 @@ class TrainingModel(model.SockeyeModel):
                embedder.encode(source, source_length, seq_len)
                for embedder, source, source_length, seq_len in zip(self.embedding_source, multisource, multisource_length, multisource_seq_len) ]
 
-            delme = multisource_embeds[0][0].infer_shape(source=(100,3,46,1))
-            delme = multisource_embeds[1][0].infer_shape(source=(100,3,46,1))
-            delme = multisource_embeds[2][0].infer_shape(source=(100,3,46,1))
+            #delme = multisource_embeds[0][0].infer_shape(source=(100,3,61,1))
+            #delme = multisource_embeds[1][0].infer_shape(source=(100,3,61,1))
+            #delme = multisource_embeds[2][0].infer_shape(source=(100,3,61,1))
 
-            delme = multisource_embeds[0][1].infer_shape(source=(100,3,46,1))
-            delme = multisource_embeds[1][1].infer_shape(source=(100,3,46,1))
-            delme = multisource_embeds[2][1].infer_shape(source=(100,3,46,1))
+            #delme = multisource_embeds[0][1].infer_shape(source=(100,3,61,1))
+            #delme = multisource_embeds[1][1].infer_shape(source=(100,3,61,1))
+            #delme = multisource_embeds[2][1].infer_shape(source=(100,3,61,1))
 
             # target embedding
             (target_embed,
@@ -161,13 +159,14 @@ class TrainingModel(model.SockeyeModel):
                     encoder.encode(*encoder_args)
                     for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
 
-            delme = multisource_encoded[0][0].infer_shape(source=(100,3,46,1))
-            delme = multisource_encoded[1][0].infer_shape(source=(100,3,46,1))
-            delme = multisource_encoded[2][0].infer_shape(source=(100,3,46,1))
+            from pudb import set_trace; set_trace()
+            #delme = multisource_encoded[0][0].infer_shape(source=(100,3,61,1))
+            #delme = multisource_encoded[1][0].infer_shape(source=(100,3,61,1))
+            #delme = multisource_encoded[2][0].infer_shape(source=(100,3,61,1))
 
-            delme = multisource_encoded[0][1].infer_shape(source=(100,3,46,1))
-            delme = multisource_encoded[1][1].infer_shape(source=(100,3,46,1))
-            delme = multisource_encoded[2][1].infer_shape(source=(100,3,46,1))
+            #delme = multisource_encoded[0][1].infer_shape(source=(100,3,61,1))
+            #delme = multisource_encoded[1][1].infer_shape(source=(100,3,61,1))
+            #delme = multisource_encoded[2][1].infer_shape(source=(100,3,61,1))
 
             # TODO: Sam what length should I be using here since not all sources have the same length?
             source_encoded_length  = multisource_encoded[0][1]
@@ -181,9 +180,9 @@ class TrainingModel(model.SockeyeModel):
                             for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
                         dim=2,
                         name='multisource_combined_embeddings')
-                delme = multisource_encoded_concat.infer_shape(source=(100,3,46,1))
+                #delme = multisource_encoded_concat.infer_shape(source=(100,3,61,1))
                 source_encoded = self.encoder2decoder(multisource_encoded_concat)
-                delme = source_encoded.infer_shape(source=(100,3,46,1))
+                #delme = source_encoded.infer_shape(source=(100,3,61,1))
             else:
                 source_encoded = multisource_encoded[0][0]
 
@@ -233,7 +232,6 @@ class TrainingModel(model.SockeyeModel):
                                         compression_params=self._gradient_compression_params,
                                         fixed_param_names=fixed_param_names)
 
-        from pudb import set_trace; set_trace()
         self.module.bind(data_shapes=provide_data,
                          label_shapes=provide_label,
                          for_training=True,
