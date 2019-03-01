@@ -1054,6 +1054,7 @@ class TransformerEncoder(Encoder):
         if self.config.dropout_prepost > 0.0:
             data = mx.sym.Dropout(data=data, p=self.config.dropout_prepost)
 
+        # TODO: Sam is this where the [1, 7, 512] add bias error comes from?
         # (batch_size * heads, 1, max_length)
         bias = mx.sym.reshape(transformer.get_variable_length_bias(lengths=data_length,
                                                                    max_length=seq_len,

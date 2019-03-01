@@ -68,6 +68,7 @@ def define_multisource_parallel_buckets(max_seq_len_source: int,
                 for ratio in length_ratios]) + (size,)
             for size in target_buckets ]
 
+    # TODO: Sam this overrides the previous buckets and make sizes of a given bucket equal for all sources + target.
     buckets = [ (size,)*4 for size in target_buckets ]
 
     assert all(len(bucket) == len(length_ratios)+1 for bucket in buckets)

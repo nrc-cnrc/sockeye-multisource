@@ -109,7 +109,12 @@ class SockeyeModel:
         num_sources = len(self.config.config_encoders)
 
         # encoder & decoder first (to know the decoder depth)
-        self.encoder = [ encoder.get_encoder(config, prefix=self.prefix + 'menc%d_' % i) for i, config in enumerate(self.config.config_encoders) ]
+        self.encoders : List[encoder.Encoder] = []
+        for i, config in enumerate(self.config.config_encoders):
+            with mx.name.Prefix('menc%d' % i):
+                enc = encoder.get_encoder(config, prefix=self.prefix + 'menc%d' % i)
+                self.encoders.append(enc)
+
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
 
         # source & target embeddings
@@ -132,7 +137,7 @@ class SockeyeModel:
 
         # multisource projection
         # TODO: Sam Where is the model size?
-        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoder),
+        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
                                                vocab_size=self.decoder.get_num_hidden(),
                                                weight = None,
                                                weight_normalization=self.config.weight_normalization,

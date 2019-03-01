@@ -157,9 +157,8 @@ class TrainingModel(model.SockeyeModel):
             # [(source_encoded, source_encoded_length, source_encoded_seq_len)]
             multisource_encoded = [
                     encoder.encode(*encoder_args)
-                    for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
+                    for encoder, encoder_args in zip(self.encoders, multisource_embeds) ]
 
-            from pudb import set_trace; set_trace()
             #delme = multisource_encoded[0][0].infer_shape(source=(100,3,61,1))
             #delme = multisource_encoded[1][0].infer_shape(source=(100,3,61,1))
             #delme = multisource_encoded[2][0].infer_shape(source=(100,3,61,1))

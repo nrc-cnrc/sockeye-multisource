@@ -84,7 +84,6 @@ class InferenceModel(model.SockeyeModel):
 
         self.batch_size = batch_size
         self.softmax_temperature = softmax_temperature
-        from pudb import set_trace; set_trace()
         self.max_input_length, self.get_max_output_length = models_max_input_output_length([self],
                                                                                            max_output_length_num_stds,
                                                                                            forced_max_output_len=forced_max_output_len)
@@ -143,7 +142,6 @@ class InferenceModel(model.SockeyeModel):
                                   "ratio observed during training." % (self.max_supported_seq_len_target,
                                                                        decoder_max_len))
 
-        from pudb import set_trace; set_trace()
         self.encoder_module, self.encoder_default_bucket_key = self._get_encoder_module()
         self.decoder_module, self.decoder_default_bucket_key = self._get_decoder_module()
 
