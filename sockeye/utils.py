@@ -30,6 +30,7 @@ import sockeye.multiprocessing_utils as mp_utils
 import multiprocessing
 from contextlib import contextmanager, ExitStack
 from typing import Mapping, Any, List, Iterator, Iterable, Set, Tuple, Dict, Optional, Union, IO, TypeVar, cast
+from itertools import zip_longest
 
 import mxnet as mx
 import numpy as np
@@ -994,3 +995,13 @@ def inflect(word: str,
         return 'was' if count == 1 else 'were'
     else:
         return word + '(s)'
+
+
+
+def merge_with_factors(main_factor: List[str],
+        other_factors: List[Optional[List[Optional[str]]]]) -> List[List[str]]:
+    """
+    """
+    multisource_with_factors = [ [mf] + of for mf, of in zip_longest(main_factor, other_factors, fillvalue=[]) ]
+    assert all(len(multisource_with_factors[0]) == len(factors) for factors in multisource_with_factors)
+    return multisource_with_factors

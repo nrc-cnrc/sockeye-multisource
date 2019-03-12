@@ -73,7 +73,6 @@ def run_translate(args: argparse.Namespace):
                                     exit_stack=exit_stack)[0]
         logger.info("Translate Device: %s", context)
 
-        from pudb import set_trace; set_trace()
         models, source_vocabs, target_vocab = inference.load_models(
             context=context,
             max_input_len=args.max_input_len,
@@ -124,14 +123,14 @@ def run_translate(args: argparse.Namespace):
 def make_inputs(input_file: Optional[List[str]],
                 translator: inference.Translator,
                 input_is_json: bool,
-                input_factors: Optional[List[str]] = None) -> Generator[inference.TranslatorInput, None, None]:
+                input_factors: Optional[List[List[str]]] = None) -> Generator[inference.TranslatorInput, None, None]:
     """
     Generates TranslatorInput instances from input. If input is None, reads from stdin. If num_input_factors > 1,
     the function will look for factors attached to each token, separated by '|'.
     If source is not None, reads from the source file. If num_source_factors > 1, num_source_factors source factor
     filenames are required.
 
-    :param input_file: The source file (possibly None).
+    :param input_file: The multisource file (possibly None).
     :param translator: Translator that will translate each line of input.
     :param input_is_json: Whether the input is in json format.
     :param input_factors: Source factor files.
@@ -147,26 +146,27 @@ def make_inputs(input_file: Optional[List[str]],
                                                                 factored_string=line,
                                                                 translator=translator)
     else:
+        # TODO: Sam include multisource factors.
         input_factors = [] if input_factors is None else input_factors
-        inputs = [input_file] + input_factors
+        multisource_inputs = utils.merge_with_factors(input_file, input_factors)
         if not input_is_json:
-            check_condition(translator.num_source_factors == len(inputs),
+            check_condition(translator.num_source_factors == len(multisource_inputs[0]),
                             "Model(s) require %d factors, but %d given (through --input and --input-factors)." % (
-                                translator.num_source_factors, len(inputs)))
+                                translator.num_source_factors, len(multisource_inputs[0])))
         with ExitStack() as exit_stack:
-            streams = [exit_stack.enter_context(data_io.smart_open(i)) for i in inputs]
-            for sentence_id, inputs in enumerate(zip(*streams), 1):
+            streams = [ [ exit_stack.enter_context(data_io.smart_open(factor)) for factor in source ] for source in multisource_inputs ]
+            for sentence_id, inputs in enumerate(zip(*(zip(*source) for source in streams)), 1):
                 if input_is_json:
                     yield inference.make_input_from_json_string(sentence_id=sentence_id, json_string=inputs[0])
                 else:
-                    yield inference.make_input_from_multiple_strings(sentence_id=sentence_id, strings=list(inputs))
+                    yield inference.make_input_from_multiple_strings(sentence_id=sentence_id, multisource_strings=list(inputs))
 
 
 def read_and_translate(translator: inference.Translator,
                        output_handler: OutputHandler,
                        chunk_size: Optional[int],
-                       input_file: Optional[str] = None,
-                       input_factors: Optional[List[str]] = None,
+                       input_file: Optional[List[str]] = None,
+                       input_factors: Optional[List[List[str]]] = None,
                        input_is_json: bool = False) -> None:
     """
     Reads from either a file or stdin and translates each line, calling the output_handler with the result.

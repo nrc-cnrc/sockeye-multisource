@@ -215,7 +215,7 @@ class InferenceModel(model.SockeyeModel):
             # [(source_encoded, source_encoded_length, source_encoded_seq_len)]
             multisource_encoded = [
                     encoder.encode(*encoder_args)
-                    for encoder, encoder_args in zip(self.encoder, multisource_embeds) ]
+                    for encoder, encoder_args in zip(self.encoders, multisource_embeds) ]
 
             # TODO: Sam what length should I be using here since not all sources have the same length?
             source_encoded_length = multisource_encoded[0][1]
@@ -263,7 +263,7 @@ class InferenceModel(model.SockeyeModel):
             """
             source_seq_len, decode_step = bucket_key
             source_embed_seq_len = self.embedding_source[0].get_encoded_seq_len(source_seq_len)
-            source_encoded_seq_len = self.encoder[0].get_encoded_seq_len(source_embed_seq_len)
+            source_encoded_seq_len = self.encoders[0].get_encoded_seq_len(source_embed_seq_len)
 
             self.decoder.reset()
             target_prev = mx.sym.Variable(C.TARGET_NAME)
@@ -331,9 +331,9 @@ class InferenceModel(model.SockeyeModel):
         return [mx.io.DataDesc(name=C.TARGET_NAME, shape=(self.batch_size * self.beam_size,),
                                layout="NT")] + self.decoder.state_shapes(self.batch_size * self.beam_size,
                                                                          target_max_length,
-                                                                         self.encoder[0].get_encoded_seq_len(
+                                                                         self.encoders[0].get_encoded_seq_len(
                                                                              source_max_length),
-                                                                         self.encoder[0].get_num_hidden())
+                                                                         self.encoders[0].get_num_hidden())
 
     def run_encoder(self,
                     source: mx.nd.NDArray,
@@ -391,7 +391,7 @@ class InferenceModel(model.SockeyeModel):
     @property
     def max_supported_seq_len_source(self) -> Optional[int]:
         """ If not None this is the maximally supported source length during inference (hard constraint). """
-        seq_lens = [ _encoder.get_max_seq_len() for _encoder in self.encoder ]
+        seq_lens = [ _encoder.get_max_seq_len() for _encoder in self.encoders ]
         return max(filter(lambda x: x is not None, seq_lens), default=None)
 
     @property
@@ -675,8 +675,8 @@ class TranslatorInput:
 
     def __init__(self,
                  sentence_id: SentenceId,
-                 tokens: Tokens,
-                 factors: Optional[List[Tokens]] = None,
+                 tokens: List[Tokens],
+                 factors: Optional[List[List[Tokens]]] = None,
                  constraints: Optional[List[Tokens]] = None,
                  avoid_list: Optional[List[Tokens]] = None,
                  pass_through_dict: Optional[Dict] = None) -> None:
@@ -686,13 +686,17 @@ class TranslatorInput:
         self.constraints = constraints
         self.avoid_list = avoid_list
         self.pass_through_dict = pass_through_dict
+        assert len(tokens) == len(factors)
 
     def __str__(self):
         return 'TranslatorInput(%s, %s, factors=%s, constraints=%s, avoid=%s)' \
             % (self.sentence_id, self.tokens, self.factors, self.constraints, self.avoid_list)
 
+    def __repr__(self):
+        return "TranslatorInput[%s]" % ", ".join("%s=%s" % (str(k), getattr(self, k)) for k in sorted(self.__slots__))
+
     def __len__(self):
-        return len(self.tokens)
+        return max(len(t) for t in self.tokens)
 
     @property
     def num_factors(self) -> int:
@@ -700,6 +704,13 @@ class TranslatorInput:
         Returns the number of factors of this instance.
         """
         return 1 + (0 if not self.factors else len(self.factors))
+
+    @property
+    def num_source(self) -> int:
+        """
+        Returns the number of sources of this instance.
+        """
+        return len(self.tokens)
 
     def chunks(self, chunk_size: int) -> Generator['TranslatorInput', None, None]:
         """
@@ -734,9 +745,9 @@ class TranslatorInput:
         :return: A new translator input with EOS appended to the tokens and factors.
         """
         return TranslatorInput(sentence_id=self.sentence_id,
-                               tokens=self.tokens + [C.EOS_SYMBOL],
-                               factors=[factor + [C.EOS_SYMBOL] for factor in
-                                        self.factors] if self.factors is not None else None,
+                               tokens=[ tokens + [C.EOS_SYMBOL] for tokens in self.tokens ],
+                               factors=[ [ f + [C.EOS_SYMBOL] for f in factor ]
+                                   for factor in self.factors] if self.factors is not None else None,
                                constraints=self.constraints,
                                avoid_list=self.avoid_list,
                                pass_through_dict=self.pass_through_dict)
@@ -874,23 +885,24 @@ def make_input_from_factored_string(sentence_id: SentenceId,
     return TranslatorInput(sentence_id=sentence_id, tokens=tokens, factors=factors)
 
 
-def make_input_from_multiple_strings(sentence_id: SentenceId, strings: List[str]) -> TranslatorInput:
+def make_input_from_multiple_strings(sentence_id: SentenceId, multisource_strings: List[List[str]]) -> TranslatorInput:
     """
-    Returns a TranslatorInput object from multiple strings, where the first element corresponds to the surface tokens
-    and the remaining elements to additional factors. All strings must parse into token sequences of the same length.
+    Returns a TranslatorInput object from multiple multisource_strings, where the first element corresponds to the surface tokens
+    and the remaining elements to additional factors. All multisource_strings must parse into token sequences of the same length.
 
     :param sentence_id: Sentence id.
-    :param strings: A list of strings representing a factored input sequence.
+    :param multisource_strings: A list of strings representing a factored input sequence.
     :return: A TranslatorInput.
     """
-    if not bool(strings):
+    if not bool(multisource_strings):
         return TranslatorInput(sentence_id=sentence_id, tokens=[], factors=None)
 
-    tokens = list(data_io.get_tokens(strings[0]))
-    factors = [list(data_io.get_tokens(factor)) for factor in strings[1:]]
-    if not all(len(factor) == len(tokens) for factor in factors):
-        logger.error("Length of string sequences do not match: '%s'", strings)
-        return _bad_input(sentence_id, reason=str(strings))
+    tokens = [ list(data_io.get_tokens(source[0])) for source in multisource_strings ]
+    factors = [ [ list(data_io.get_tokens(factor)) for factor in source[1:] ] for source in multisource_strings ]
+    assert len(tokens) == len(factors)
+    if not all( all(len(factor) == len(s) for factor in fs) for s, fs in zip(tokens, factors) ):
+        logger.error("Length of string sequences do not match: '%s'", multisource_strings)
+        return _bad_input(sentence_id, reason=str(multisource_strings))
     return TranslatorInput(sentence_id=sentence_id, tokens=tokens, factors=factors)
 
 
@@ -1543,8 +1555,11 @@ class Translator:
                 and an NDArray of maximum output lengths.
         """
 
-        bucket_key = data_io.get_bucket(max(len(inp.tokens) for inp in trans_inputs), self.buckets_source)
-        source = mx.nd.zeros((len(trans_inputs), bucket_key, self.num_source_factors), ctx=self.context)
+        bucket_key = data_io.get_bucket(max(len(inp) for inp in trans_inputs), self.buckets_source)
+        # TODO: Sam add one dimension for the multisource
+        # Where to get num_sources?
+        num_sources = trans_inputs[0].num_source
+        multisource = mx.nd.zeros((len(trans_inputs), num_sources, bucket_key, self.num_source_factors), ctx=self.context)
         raw_constraints = [None for x in range(self.batch_size)]  # type: List[Optional[constrained.RawConstraintList]]
         raw_avoid_list = [None for x in range(self.batch_size)]  # type: List[Optional[constrained.RawConstraintList]]
 
@@ -1552,17 +1567,19 @@ class Translator:
         for j, trans_input in enumerate(trans_inputs):
             num_tokens = len(trans_input)
             max_output_lengths.append(self.models[0].get_max_output_length(data_io.get_bucket(num_tokens, self.buckets_source)))
-            source[j, :num_tokens, 0] = data_io.tokens2ids(trans_input.tokens, self.source_vocabs[0])
+            for s, source in enumerate(trans_input.tokens):
+                # TODO: Sam account for the multisource
+                multisource[j, s, :num_tokens, 0] = data_io.tokens2ids(source, self.source_vocabs[s][0])
 
             factors = trans_input.factors if trans_input.factors is not None else []
-            num_factors = 1 + len(factors)
-            if num_factors != self.num_source_factors:
-                logger.warning("Input %d factors, but model(s) expect %d", num_factors,
-                               self.num_source_factors)
-            for i, factor in enumerate(factors[:self.num_source_factors - 1], start=1):
-                # fill in as many factors as there are tokens
-
-                source[j, :num_tokens, i] = data_io.tokens2ids(factor, self.source_vocabs[i])[:num_tokens]
+            for s, f in enumerate(factors):
+                num_factors = 1 + len(f)
+                if num_factors != self.num_source_factors:
+                    logger.warning("Input %d factors, but model(s) expect %d", num_factors,
+                                   self.num_source_factors)
+                for i, factor in enumerate(factors[:self.num_source_factors - 1], start=1):
+                    # fill in as many factors as there are tokens
+                    multisource[j, s, :num_tokens, i] = data_io.tokens2ids(factor, self.source_vocabs[s][i])[:num_tokens]
 
             if trans_input.constraints is not None:
                 raw_constraints[j] = [data_io.tokens2ids(phrase, self.vocab_target) for phrase in
@@ -1575,7 +1592,7 @@ class Translator:
                     logger.warning("Sentence %s: %s was found in the list of phrases to avoid; "
                                    "this may indicate improper preprocessing.", trans_input.sentence_id, C.UNK_SYMBOL)
 
-        return source, bucket_key, raw_constraints, raw_avoid_list, mx.nd.array(max_output_lengths, ctx=self.context, dtype='int32')
+        return multisource, bucket_key, raw_constraints, raw_avoid_list, mx.nd.array(max_output_lengths, ctx=self.context, dtype='int32')
 
     def _make_result(self,
                      trans_input: TranslatorInput,
@@ -1756,10 +1773,11 @@ class Translator:
                 beam histories (if any).
         """
 
+        from pudb import set_trace; set_trace()
         # Length of encoded sequence (may differ from initial input length)
-        encoded_source_length = self.models[0].encoder[0].get_encoded_seq_len(source_length)
+        encoded_source_length = self.models[0].encoders[0].get_encoded_seq_len(source_length)
         utils.check_condition(all(encoded_source_length ==
-                                  model.encoder[0].get_encoded_seq_len(source_length) for model in self.models),
+                                  model.encoders[0].get_encoded_seq_len(source_length) for model in self.models),
                               "Models must agree on encoded sequence length")
         # Maximum output length
         max_output_length = self.models[0].get_max_output_length(source_length)
