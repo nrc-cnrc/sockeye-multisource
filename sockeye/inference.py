@@ -1556,8 +1556,6 @@ class Translator:
         """
 
         bucket_key = data_io.get_bucket(max(len(inp) for inp in trans_inputs), self.buckets_source)
-        # TODO: Sam add one dimension for the multisource
-        # Where to get num_sources?
         num_sources = trans_inputs[0].num_source
         multisource = mx.nd.zeros((len(trans_inputs), num_sources, bucket_key, self.num_source_factors), ctx=self.context)
         raw_constraints = [None for x in range(self.batch_size)]  # type: List[Optional[constrained.RawConstraintList]]
@@ -1568,7 +1566,7 @@ class Translator:
             num_tokens = len(trans_input)
             max_output_lengths.append(self.models[0].get_max_output_length(data_io.get_bucket(num_tokens, self.buckets_source)))
             for s, source in enumerate(trans_input.tokens):
-                # TODO: Sam account for the multisource
+                num_tokens = len(source)
                 multisource[j, s, :num_tokens, 0] = data_io.tokens2ids(source, self.source_vocabs[s][0])
 
             factors = trans_input.factors if trans_input.factors is not None else []
@@ -1773,7 +1771,7 @@ class Translator:
                 beam histories (if any).
         """
 
-        from pudb import set_trace; set_trace()
+        #from pudb import set_trace; set_trace()
         # Length of encoded sequence (may differ from initial input length)
         encoded_source_length = self.models[0].encoders[0].get_encoded_seq_len(source_length)
         utils.check_condition(all(encoded_source_length ==
