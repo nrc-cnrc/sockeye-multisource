@@ -136,7 +136,6 @@ class SockeyeModel:
                                                   embed_weight=embed_weight_target)
 
         # multisource projection
-        # TODO: Sam Where is the model size?
         self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
                                                vocab_size=self.decoder.get_num_hidden(),
                                                weight = None,
@@ -231,26 +230,35 @@ class SockeyeModel:
                                                 self.config.config_embed_target.num_embed))
 
         w_out_target = mx.sym.Variable(prefix + "target_output_weight",
-                                       shape=(self.config.vocab_target_size, self.decoder.get_num_hidden()))
+                                       shape=(self.config.vocab_target_size,
+                                              self.decoder.get_num_hidden()))
 
         if self.config.weight_tying:
             if C.WEIGHT_TYING_SRC in self.config.weight_tying_type \
                     and C.WEIGHT_TYING_TRG in self.config.weight_tying_type:
+                utils.check_condition(all(config.vocab_size == self.config.config_embed_target.vocab_size
+                    for config in self.config.config_embed_sources),
+                    "Incompatible vocab sizes between sources and target.")
+                utils.check_condition(all(config.num_embed == self.config.config_embed_target.num_embed
+                    for config in self.config.config_embed_sources),
+                    "Incompatible embed sizes between sources and target.")
                 logger.info("Tying the source and target embeddings.")
-                # TODO: Sam Implement weight tying with multiple sources.
-                assert False, "Not Yet Implemented."
-                w_embed_source = w_embed_target = mx.sym.Variable(prefix + C.SHARED_EMBEDDING_PREFIX + "weight",
-                                                                  shape=(self.config.config_embed_sources.vocab_size,
-                                                                         self.config.config_embed_sources.num_embed))
+                # TODO: Sam Implement weight tying with multiple sources.  Should we only tie vocabularies for the main factor and not the other factors?
+                del w_embed_source
+                del w_embed_target
+                w_embed_target = mx.sym.Variable(prefix + C.SHARED_EMBEDDING_PREFIX + "weight",
+                                                 shape=(self.config.config_embed_target.vocab_size,
+                                                        self.config.config_embed_target.num_embed))
+                w_embed_source = [w_embed_target] * len(self.config.config_embed_sources)
 
             if C.WEIGHT_TYING_SOFTMAX in self.config.weight_tying_type:
                 logger.info("Tying the target embeddings and output layer parameters.")
                 # TODO: Sam Implement weight tying with multiple sources.
-                assert False, "Not Yet Implemented."
                 utils.check_condition(self.config.config_embed_target.num_embed == self.decoder.get_num_hidden(),
                                       "Weight tying requires target embedding size and decoder hidden size " +
                                       "to be equal: %d vs. %d" % (self.config.config_embed_target.num_embed,
                                                                   self.decoder.get_num_hidden()))
+                del w_out_target
                 w_out_target = w_embed_target
 
         self._embed_weight_source_name = None
