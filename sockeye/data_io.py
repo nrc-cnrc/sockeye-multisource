@@ -132,7 +132,7 @@ def define_empty_source_parallel_buckets(max_seq_len_target: int,
     target_buckets = [max(2, b) for b in target_buckets]
     parallel_buckets = list(zip(source_buckets, target_buckets))
     # deduplicate for return
-    buckets = list(OrderedDict.fromkeys(parallel_buckets))
+    buckets : List[Tuple[int, ...]] = list(OrderedDict.fromkeys(parallel_buckets))
     buckets.sort()
     return buckets
 
@@ -766,7 +766,9 @@ def get_prepared_data_iters(prepared_data_dir: str,
                             fill_up: str,
                             permute: bool = True) -> Tuple['BaseParallelSampleIter',
                                                            'BaseParallelSampleIter',
-                                                           'DataConfig', List[vocab.Vocab], vocab.Vocab]:
+                                                           'DataConfig',
+                                                           List[List[vocab.Vocab]],
+                                                           vocab.Vocab]:
     logger.info("===============================")
     logger.info("Creating training data iterator")
     logger.info("===============================")
@@ -825,6 +827,7 @@ def get_prepared_data_iters(prepared_data_dir: str,
                                            permute=permute)
 
     data_loader = RawParallelDatasetLoader(buckets=buckets,
+                                           #num_factors=,
                                            eos_id=target_vocab[C.EOS_SYMBOL],
                                            pad_id=C.PAD_ID)
 
@@ -846,7 +849,7 @@ def get_prepared_data_iters(prepared_data_dir: str,
 def get_training_data_iters(multisource_with_factors: List[List[str]],
                             target: str,
                             validation_sources: Optional[List[List[str]]],
-                            validation_target: Optional[List[str]],
+                            validation_target: Optional[str],
                             source_vocabs: List[List[vocab.Vocab]],
                             target_vocab: vocab.Vocab,
                             source_vocab_paths: List[List[Optional[str]]],
@@ -1077,9 +1080,9 @@ class DataInfo(config.Config):
     """
 
     def __init__(self,
-                 sources: List[str],
+                 sources: List[List[str]],
                  target: str,
-                 source_vocabs: List[Optional[str]],
+                 source_vocabs: List[List[Optional[str]]],
                  target_vocab: Optional[str],
                  shared_vocab: bool,
                  num_shards: int) -> None:
@@ -1098,7 +1101,7 @@ class DataConfig(config.Config):
     """
 
     def __init__(self,
-                 data_statistics: DataStatistics,
+                 data_statistics: List[DataStatistics],
                  max_seq_len_source: int,
                  max_seq_len_target: int,
                  num_source_factors: int,
@@ -1279,7 +1282,7 @@ def parallel_iter(source_iters: Sequence[Sequence[Iterable[Optional[Any]]]], tar
     Checks that all iterables have the same number of elements.
     """
     num_skipped = 0
-    source_iters = [ map(iter, s) for s in source_iters ]
+    source_iters = [ [ iter(factor_it) for factor_it in factor_iters] for factor_iters in source_iters ]
     target_iter = iter(target_iterable)
     for sources, target in zip(zip(*(zip(*l) for l in source_iters)), target_iter):
         if any(any(factor is None for factor in factors) for factors in sources) or target is None:
@@ -1373,7 +1376,7 @@ def get_target_bucket(buckets: List[Tuple[int, ...]],
     bucket = None, None  # type: Tuple[int, Tuple[int, ...]]
     for j, (*source_bkt, target_bkt) in enumerate(buckets):
         if target_bkt >= length_target:
-            bucket = j, (source_bkt, target_bkt)
+            bucket = j, (*source_bkt, target_bkt)
             break
     return bucket
 

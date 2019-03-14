@@ -489,7 +489,7 @@ class EarlyStoppingTrainer:
                  optimizer_config: OptimizerConfig,
                  max_params_files_to_keep: int,
                  keep_initializations: bool,
-                 source_vocabs: List[vocab.Vocab],
+                 source_vocabs: List[List[vocab.Vocab]],
                  target_vocab: vocab.Vocab) -> None:
         self.model = model
         self.optimizer_config = optimizer_config

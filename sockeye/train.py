@@ -242,7 +242,7 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
                                  output_folder: str) -> Tuple['data_io.BaseParallelSampleIter',
                                                               'data_io.BaseParallelSampleIter',
                                                               'data_io.DataConfig',
-                                                              List[vocab.Vocab], vocab.Vocab]:
+                                                              List[List[vocab.Vocab]], vocab.Vocab]:
     """
     Create the data iterators and the vocabularies.
 
@@ -302,11 +302,11 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
             utils.check_condition(vocab.are_identical(target_vocab, model_target_vocab),
                                   "Prepared data and resumed model target vocabs do not match.")
 
-        check_condition(len(data_config) == len(validation_multisource),
-                'Unexpected number of validation multisource (%d)' % (len(data_config), len(validation_multisource)))
-        check_condition(data_config[0].num_source_factors == len(validation_multisource[0]),
+        check_condition(len(data_config.data_statistics) == len(validation_multisource),
+                'Unexpected number of validation multisource (%d vs %d)' % (len(data_config.data_statistics), len(validation_multisource)))
+        check_condition(data_config.num_source_factors == len(validation_multisource[0]),
                         'Training and validation data must have the same number of factors, but found %d and %d.' % (
-                            data_config[0].num_source_factors, len(validation_multisource[0])))
+                            data_config.num_source_factors, len(validation_multisource[0])))
 
         return train_iter, validation_iter, data_config, source_vocabs, target_vocab
 
@@ -631,7 +631,7 @@ def create_model_config(args: argparse.Namespace,
     num_embed_source, num_embed_target = args.num_embed
     embed_dropout_source, embed_dropout_target = args.embed_dropout
     source_vocab_size = []
-    source_factor_vocab_sizes = []
+    source_factor_vocab_sizes : List[List[int]] = []
     for sizes in source_vocab_sizes:
         size, *factor_sizes = sizes
         source_vocab_size.append(size)
@@ -743,7 +743,7 @@ def gradient_compression_params(args: argparse.Namespace) -> Optional[Dict[str, 
         return {'type': args.gradient_compression_type, 'threshold': args.gradient_compression_threshold}
 
 
-def create_optimizer_config(args: argparse.Namespace, source_vocab_sizes: List[int],
+def create_optimizer_config(args: argparse.Namespace, source_vocab_sizes: List[List[int]],
                             extra_initializers: List[Tuple[str, mx.initializer.Initializer]] = None) -> OptimizerConfig:
     """
     Returns an OptimizerConfig.

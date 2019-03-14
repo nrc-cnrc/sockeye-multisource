@@ -52,7 +52,7 @@ class ModelConfig(Config):
 
     def __init__(self,
                  config_data: data_io.DataConfig,
-                 vocab_source_size: int,
+                 vocab_source_size: List[int],
                  vocab_target_size: int,
                  config_embed_sources: List[encoder.EmbeddingConfig],
                  config_embed_target: encoder.EmbeddingConfig,

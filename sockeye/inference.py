@@ -402,11 +402,11 @@ class InferenceModel(model.SockeyeModel):
     @property
     def length_ratio_mean(self) -> float:
         # TODO: Sam what is the proper length ratio to return when we have multiple sources.
-        return self.config.config_data.data_statistics[0].length_ratio_mean
+        return max(stat.length_ratio_mean for stat in self.config.config_data.data_statistics)
 
     @property
     def length_ratio_std(self) -> float:
-        return self.config.config_data.data_statistics[0].length_ratio_std
+        return max(stat.length_ratio_std for stat in self.config.config_data.data_statistics)
 
     @property
     def source_with_eos(self) -> bool:
@@ -755,13 +755,13 @@ class TranslatorInput:
 
 class BadTranslatorInput(TranslatorInput):
 
-    def __init__(self, sentence_id: SentenceId, tokens: Tokens) -> None:
+    def __init__(self, sentence_id: SentenceId, tokens: List[Tokens]) -> None:
         super().__init__(sentence_id=sentence_id, tokens=tokens, factors=None)
 
 
 def _bad_input(sentence_id: SentenceId, reason: str = '') -> BadTranslatorInput:
     logger.warning("Bad input (%s): '%s'. Will return empty output.", sentence_id, reason.strip())
-    return BadTranslatorInput(sentence_id=sentence_id, tokens=[])
+    return BadTranslatorInput(sentence_id=sentence_id, tokens=[[]])
 
 
 def make_input_from_plain_string(sentence_id: SentenceId, string: str) -> TranslatorInput:
@@ -772,7 +772,7 @@ def make_input_from_plain_string(sentence_id: SentenceId, string: str) -> Transl
     :param string: An input string.
     :return: A TranslatorInput.
     """
-    return TranslatorInput(sentence_id, tokens=list(data_io.get_tokens(string)), factors=None)
+    return TranslatorInput(sentence_id, tokens=[list(data_io.get_tokens(string))], factors=None)
 
 
 def make_input_from_json_string(sentence_id: SentenceId, json_string: str) -> TranslatorInput:
@@ -882,7 +882,7 @@ def make_input_from_factored_string(sentence_id: SentenceId,
         for i, factor in enumerate(factors):
             factors[i].append(pieces[i + 1])
 
-    return TranslatorInput(sentence_id=sentence_id, tokens=tokens, factors=factors)
+    return TranslatorInput(sentence_id=sentence_id, tokens=[tokens], factors=[factors])
 
 
 def make_input_from_multiple_strings(sentence_id: SentenceId, multisource_strings: List[List[str]]) -> TranslatorInput:
