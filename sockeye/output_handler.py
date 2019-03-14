@@ -185,7 +185,7 @@ class PairWithScoreOutputHandler(OutputHandler):
         :param t_walltime: Total walltime for translation.
         """
         self.stream.write("{:.3f}\t{}\t{}\n".format(t_output.score,
-                                                    C.TOKEN_SEPARATOR.join(t_input.tokens),
+                                                    '\t'.join(C.TOKEN_SEPARATOR.join(tokens) for tokens in t_input.tokens),
                                                     t_output.translation))
         self.stream.flush()
 
@@ -260,11 +260,12 @@ class StringWithAlignmentMatrixOutputHandler(StringOutputHandler):
         :param t_walltime: Total wall-clock time for translation.
         """
         line = "{sent_id} ||| {target} ||| {score:f} ||| {source} ||| {source_len:d} ||| {target_len:d}\n"
+        # TODO: Sam how to handle alignment in a multisource scenario.
         self.stream.write(line.format(sent_id=t_input.sentence_id,
                                       target=" ".join(t_output.tokens),
                                       score=t_output.score,
-                                      source=" ".join(t_input.tokens),
-                                      source_len=len(t_input.tokens),
+                                      source=" ".join(t_input.tokens[0]),
+                                      source_len=len(t_input.tokens[0]),
                                       target_len=len(t_output.tokens)))
         attention_matrix = t_output.attention_matrix.T
         for i in range(0, attention_matrix.shape[0]):
@@ -293,10 +294,11 @@ class BenchmarkOutputHandler(StringOutputHandler):
         :param t_output: Translator output.
         :param t_walltime: Total walltime for translation.
         """
+        # TODO: Sam how to handle alignment in a multisource scenario.
         self.stream.write("input=%s\toutput=%s\tinput_tokens=%d\toutput_tokens=%d\ttranslation_time=%0.4f\n" %
-                          (" ".join(t_input.tokens),
+                          (" ".join(t_input.tokens[0]),
                            t_output.translation,
-                           len(t_input.tokens),
+                           len(t_input.tokens[0]),
                            len(t_output.tokens),
                            t_walltime))
         self.stream.flush()
@@ -324,8 +326,9 @@ class AlignPlotHandler(OutputHandler):
         :param t_output: Translator output.
         :param t_walltime: Total wall-clock time for translation.
         """
+        # TODO: Sam how to handle alignment in a multisource scenario.
         plot_attention(t_output.attention_matrix,
-                       t_input.tokens,
+                       t_input.tokens[0],
                        t_output.tokens,
                        "%s_%s.png" % (self.plot_prefix, t_input.sentence_id))
 
@@ -352,8 +355,9 @@ class AlignTextHandler(OutputHandler):
         :param t_output: Translator output.
         :param t_walltime: Total wall-clock time for translation.
         """
+        # TODO: Sam how to handle alignment in a multisource scenario.
         print_attention_text(t_output.attention_matrix,
-                             t_input.tokens,
+                             t_input.tokens[0],
                              t_output.tokens,
                              self.threshold)
 
