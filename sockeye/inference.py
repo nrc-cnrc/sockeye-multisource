@@ -703,7 +703,7 @@ class TranslatorInput:
         """
         Returns the number of factors of this instance.
         """
-        return 1 + (0 if not self.factors else len(self.factors))
+        return 1 + (0 if not self.factors else len(self.factors[0]))
 
     @property
     def num_source(self) -> int:
@@ -720,21 +720,24 @@ class TranslatorInput:
         :return: A generator of TranslatorInputs, one for each chunk created.
         """
 
-        if len(self.tokens) > chunk_size and self.constraints is not None:
+        max_tokens = len(self)
+        if max_tokens > chunk_size and self.constraints is not None:
             logger.warning(
                 'Input %s has length (%d) that exceeds max input length (%d), '
                 'triggering internal splitting. Placing all target-side constraints '
                 'with the first chunk, which is probably wrong.',
-                self.sentence_id, len(self.tokens), chunk_size)
+                self.sentence_id, max_tokens, chunk_size)
 
         for chunk_id, i in enumerate(range(0, len(self), chunk_size)):
-            factors = [factor[i:i + chunk_size] for factor in self.factors] if self.factors is not None else None
+            # TODO: Sam how to we split multisource into chunks?
+            tokens  = [ t[i:i + chunk_size] for t in self.tokens ]
+            factors = [ [f[i:i + chunk_size] for f in factor ] for factor in self.factors] if self.factors is not None else None
             # Constrained decoding is not supported for chunked TranslatorInputs. As a fall-back, constraints are
             # assigned to the first chunk
             constraints = self.constraints if chunk_id == 0 else None
             pass_through_dict = self.pass_through_dict if chunk_id == 0 else None
             yield TranslatorInput(sentence_id=self.sentence_id,
-                                  tokens=self.tokens[i:i + chunk_size],
+                                  tokens=tokens,
                                   factors=factors,
                                   constraints=constraints,
                                   avoid_list=self.avoid_list,
@@ -744,10 +747,12 @@ class TranslatorInput:
         """
         :return: A new translator input with EOS appended to the tokens and factors.
         """
+        tokens  = [ tokens + [C.EOS_SYMBOL] for tokens in self.tokens ]
+        factors = [ [ f + [C.EOS_SYMBOL] for f in factor ]
+                   for factor in self.factors] if self.factors is not None else None
         return TranslatorInput(sentence_id=self.sentence_id,
-                               tokens=[ tokens + [C.EOS_SYMBOL] for tokens in self.tokens ],
-                               factors=[ [ f + [C.EOS_SYMBOL] for f in factor ]
-                                   for factor in self.factors] if self.factors is not None else None,
+                               tokens=tokens,
+                               factors=factors,
                                constraints=self.constraints,
                                avoid_list=self.avoid_list,
                                pass_through_dict=self.pass_through_dict)
@@ -1397,6 +1402,9 @@ class Translator:
                     self.buckets_source,
                     0 if self.global_avoid_trie is None else len(self.global_avoid_trie))
 
+    def __repr__(self):
+        return "Translator[%s]" % ", ".join("%s=%s" % (str(k), str(v)) for k, v in sorted(self.__dict__.items()))
+
     @property
     def max_input_length(self) -> int:
         """
@@ -1460,11 +1468,12 @@ class Translator:
                 if self.source_with_eos:
                     max_input_length_without_eos = self.max_input_length
                     # oversized input
-                    if len(trans_input.tokens) > max_input_length_without_eos:
+                    max_multisource_length = max(len(t) for t in trans_input.tokens)
+                    if max_multisource_length > max_input_length_without_eos:
                         logger.debug(
                             "Input %s has length (%d) that exceeds max input length (%d). "
                             "Splitting into chunks of size %d.",
-                            trans_input.sentence_id, len(trans_input.tokens),
+                            trans_input.sentence_id, max_multisource_length,
                             self.buckets_source[-1], max_input_length_without_eos)
                         chunks = [trans_input_chunk.with_eos()
                                   for trans_input_chunk in trans_input.chunks(max_input_length_without_eos)]
@@ -1556,6 +1565,8 @@ class Translator:
         """
 
         bucket_key = data_io.get_bucket(max(len(inp) for inp in trans_inputs), self.buckets_source)
+        if bucket_key is None:
+            from pudb import set_trace; set_trace()
         num_sources = trans_inputs[0].num_source
         multisource = mx.nd.zeros((len(trans_inputs), num_sources, bucket_key, self.num_source_factors), ctx=self.context)
         raw_constraints = [None for x in range(self.batch_size)]  # type: List[Optional[constrained.RawConstraintList]]
@@ -1565,13 +1576,13 @@ class Translator:
         for j, trans_input in enumerate(trans_inputs):
             num_tokens = len(trans_input)
             max_output_lengths.append(self.models[0].get_max_output_length(data_io.get_bucket(num_tokens, self.buckets_source)))
-            for s, source in enumerate(trans_input.tokens):
+            for s, (source, vocabs) in enumerate(zip(trans_input.tokens, self.source_vocabs)):
                 num_tokens = len(source)
-                multisource[j, s, :num_tokens, 0] = data_io.tokens2ids(source, self.source_vocabs[s][0])
+                multisource[j, s, :num_tokens, 0] = data_io.tokens2ids(source, vocabs[0])
 
-            factors = trans_input.factors if trans_input.factors is not None else []
-            for s, f in enumerate(factors):
-                num_factors = 1 + len(f)
+            source_factors = trans_input.factors if trans_input.factors is not None else []
+            for s, factors in enumerate(source_factors):
+                num_factors = 1 + len(factors)
                 if num_factors != self.num_source_factors:
                     logger.warning("Input %d factors, but model(s) expect %d", num_factors,
                                    self.num_source_factors)
@@ -1771,7 +1782,6 @@ class Translator:
                 beam histories (if any).
         """
 
-        #from pudb import set_trace; set_trace()
         # Length of encoded sequence (may differ from initial input length)
         encoded_source_length = self.models[0].encoders[0].get_encoded_seq_len(source_length)
         utils.check_condition(all(encoded_source_length ==
