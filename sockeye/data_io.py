@@ -1295,7 +1295,7 @@ def parallel_iter(source_iters: Sequence[Sequence[Iterable[Optional[Any]]]], tar
         logger.warning("Parallel reading of sequences skipped %d elements", num_skipped)
 
     check_condition(
-        all(next(cast(Iterator, s), None) is None for s in source_iters) and next(cast(Iterator, target_iter),
+        all(next(cast(Iterator, factor), None) is None for s in source_iters for factor in s) and next(cast(Iterator, target_iter),
                                                                                   None) is None,
         "Different number of lines in source(s) and target iterables.")
 
