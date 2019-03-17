@@ -221,10 +221,14 @@ class InferenceModel(model.SockeyeModel):
             source_encoded_length = multisource_encoded[0][1]
             source_encoded_seq_len = multisource_encoded[0][2]
 
-            if False:
+            if True:
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
-                multisource_encoded_concat = mx.sym.concat(*[source[0] for source in multisource_encoded], dim=2, name='multisource_combined_embeddings')
+                multisource_encoded_concat = mx.sym.concat(
+                        *[source_encoded
+                            for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
+                        dim=2,
+                        name='multisource_combined_embeddings')
                 source_encoded = self.encoder2decoder(multisource_encoded_concat)
             else:
                 source_encoded = multisource_encoded[0][0]
