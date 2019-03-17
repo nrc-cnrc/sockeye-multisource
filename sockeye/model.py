@@ -110,9 +110,9 @@ class SockeyeModel:
 
         # encoder & decoder first (to know the decoder depth)
         self.encoders : List[encoder.Encoder] = []
-        for i, config in enumerate(self.config.config_encoders):
+        for i, config_encoder in enumerate(self.config.config_encoders):
             with mx.name.Prefix('menc%d' % i):
-                enc = encoder.get_encoder(config, prefix=self.prefix + 'menc%d' % i)
+                enc = encoder.get_encoder(config_encoder, prefix=self.prefix + 'menc%d' % i)
                 self.encoders.append(enc)
 
         self.decoder = decoder.get_decoder(self.config.config_decoder, prefix=self.prefix)
