@@ -229,7 +229,10 @@ class InferenceModel(model.SockeyeModel):
                             for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
                         dim=2,
                         name='multisource_combined_embeddings')
-                source_encoded = self.encoder2decoder(multisource_encoded_concat)
+                if self.encoder2decoder is not None:
+                    source_encoded = self.encoder2decoder(multisource_encoded_concat)
+                else:
+                    source_encoded = multisource_encoded_concat
             else:
                 source_encoded = multisource_encoded[0][0]
 

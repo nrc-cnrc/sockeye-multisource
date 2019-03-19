@@ -180,8 +180,11 @@ class TrainingModel(model.SockeyeModel):
                         dim=2,
                         name='multisource_combined_embeddings')
                 #delme = multisource_encoded_concat.infer_shape(source=(100,3,61,1))
-                source_encoded = self.encoder2decoder(multisource_encoded_concat)
-                #delme = source_encoded.infer_shape(source=(100,3,61,1))
+                if self.encoder2decoder is not None:
+                    source_encoded = self.encoder2decoder(multisource_encoded_concat)
+                    #delme = source_encoded.infer_shape(source=(100,3,61,1))
+                else:
+                    source_encoded = multisource_encoded_concat
             else:
                 source_encoded = multisource_encoded[0][0]
 

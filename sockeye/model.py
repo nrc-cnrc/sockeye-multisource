@@ -136,11 +136,16 @@ class SockeyeModel:
                                                   embed_weight=embed_weight_target)
 
         # multisource projection
-        self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
-                                               vocab_size=self.decoder.get_num_hidden(),
-                                               weight = None,
-                                               weight_normalization=self.config.weight_normalization,
-                                               prefix=self.prefix + 'multisource_embedding_projection')
+        if num_sources > 1:
+            logger.info("Using multisource projection matrix.")
+            self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
+                                                   vocab_size=self.decoder.get_num_hidden(),
+                                                   weight = None,
+                                                   weight_normalization=self.config.weight_normalization,
+                                                   prefix=self.prefix + 'multisource_embedding_projection')
+        else:
+            logger.info("Not in multisource, disabling multisource projection matrix.")
+            self.encoder2decoder = None
 
         # output layer
         self.output_layer = layers.OutputLayer(hidden_size=self.decoder.get_num_hidden(),
