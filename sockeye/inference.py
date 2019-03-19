@@ -971,6 +971,9 @@ class TranslatorOutput:
         self.nbest_attention_matrices = nbest_attention_matrices
         self.nbest_scores = nbest_scores
 
+    def __repr__(self):
+        return "TranslatorOutput[%s]" % ", ".join("%s=%s" % (str(k), getattr(self, k)) for k in sorted(self.__slots__))
+
     def json(self, align_threshold: float = 0.0) -> Dict:
         """
         Returns a dictionary suitable for json.dumps() representing all
