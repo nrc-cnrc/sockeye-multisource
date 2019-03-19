@@ -131,6 +131,7 @@ class TrainingModel(model.SockeyeModel):
             Also returns data and label names for the BucketingModule.
             """
             *multisource_seq_len, target_seq_len = seq_lens
+            assert len(multisource_seq_len) == num_sources
 
             # source embedding
             # (source_embed, source_embed_length, source_embed_seq_len)
@@ -167,16 +168,12 @@ class TrainingModel(model.SockeyeModel):
             #delme = multisource_encoded[1][1].infer_shape(source=(100,3,61,1))
             #delme = multisource_encoded[2][1].infer_shape(source=(100,3,61,1))
 
-            # TODO: Sam what length should I be using here since not all sources have the same length?
-            source_encoded_length  = multisource_encoded[0][1]
-            source_encoded_seq_len = multisource_encoded[0][2]
-
             if True:
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
                 multisource_encoded_concat = mx.sym.concat(
                         *[source_encoded
-                            for (source_encoded, source_encoded_length, source_encoded_seq_len) in multisource_encoded],
+                            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded],
                         dim=2,
                         name='multisource_combined_embeddings')
                 #delme = multisource_encoded_concat.infer_shape(source=(100,3,61,1))
@@ -185,8 +182,23 @@ class TrainingModel(model.SockeyeModel):
                     #delme = source_encoded.infer_shape(source=(100,3,61,1))
                 else:
                     source_encoded = multisource_encoded_concat
+
+                if False:
+                    # TODO: Sam what length should I be using here since not all sources have the same length?
+                    source_encoded_length = mx.sym.concat(
+                            *[_source_encoded_length
+                                for (_source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded],
+                            dim=2,
+                            name='multisource_combined_embeddings')
+                else:
+                    source_encoded_length  = multisource_encoded[0][1]
+                #delme = source_encoded_length.infer_shape(source=(100,3,61,1))
+                source_encoded_seq_len = multisource_encoded[0][2]
             else:
                 source_encoded = multisource_encoded[0][0]
+                # TODO: Sam what length should I be using here since not all sources have the same length?
+                source_encoded_length  = multisource_encoded[0][1]
+                source_encoded_seq_len = multisource_encoded[0][2]
 
             # decoder
             # target_decoded: (batch-size, target_len, decoder_depth)
