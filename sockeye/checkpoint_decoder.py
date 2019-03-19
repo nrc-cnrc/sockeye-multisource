@@ -73,6 +73,7 @@ class CheckpointDecoder:
                  ensemble_mode: str = 'linear',
                  sample_size: int = -1,
                  random_seed: int = 42) -> None:
+        logger.info('{} {} {} {} {}'.format(context, multisource, references, model, max_input_len))
         self.context = context
         self.max_input_len = max_input_len
         self.max_output_length_num_stds = max_output_length_num_stds
@@ -158,9 +159,12 @@ class CheckpointDecoder:
             handler = sockeye.output_handler.StringOutputHandler(output)
             tic = time.time()
             trans_inputs = []  # type: List[inference.TranslatorInput]
+            # TODO: Sam are we expecting the source to change?  Why are we rebuilding trans_inputs?  Shouldn't it be computed once at __init__?
             for i, inputs in enumerate(self.inputs_sentences):
                 trans_inputs.append(sockeye.inference.make_input_from_multiple_strings(i, inputs))
+            logger.debug("CheckpointDecoder.decode_and_evaluate trans_inputs: " + str(trans_inputs))
             trans_outputs = translator.translate(trans_inputs)
+            logger.debug("CheckpointDecoder.decode_and_evaluate trans_outputs: " + str(trans_outputs))
             trans_wall_time = time.time() - tic
             for trans_input, trans_output in zip(trans_inputs, trans_outputs):
                 handler.handle(trans_input, trans_output)
@@ -204,3 +208,18 @@ def write_to_file(data: List[str], fname: str):
     with data_io.smart_open(fname, 'w') as f:
         for x in data:
             print(x.rstrip(), file=f)
+
+
+
+
+
+
+if __name__ == '__main__':
+    cp = CheckpointDecoder(
+            context=mx.cpu(),
+            multisource=[['corpora.2/dev.en'], ['corpora.2/dev.de']],
+            references='corpora.2/dev.fr',
+            model='model',
+            max_input_len = 60)
+
+    cp.decode_and_evaluate()
