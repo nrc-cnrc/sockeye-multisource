@@ -1467,7 +1467,7 @@ class Translator:
                 translated_chunks.append(IndexedTranslation(input_idx=trans_input_idx, chunk_idx=0,
                                                             translation=empty_translation(add_nbest=(self.nbest_size > 1))))
             # empty input
-            elif len(trans_input.tokens) == 0:
+            elif len(trans_input) == 0:
                 translated_chunks.append(IndexedTranslation(input_idx=trans_input_idx, chunk_idx=0,
                                                             translation=empty_translation(add_nbest=(self.nbest_size > 1))))
             else:
@@ -1492,12 +1492,13 @@ class Translator:
                                                                    chunk_idx=0,
                                                                    translator_input=trans_input.with_eos()))
                 else:
-                    if len(trans_input.tokens) > self.max_input_length:
+                    max_multisource_length = max(len(t) for t in trans_input.tokens)
+                    if max_multisource_length > self.max_input_length:
                         # oversized input
                         logger.debug(
                             "Input %s has length (%d) that exceeds max input length (%d). "
                             "Splitting into chunks of size %d.",
-                            trans_input.sentence_id, len(trans_input.tokens),
+                            trans_input.sentence_id, max_multisource_length,
                             self.buckets_source[-1], self.max_input_length)
                         chunks = [trans_input_chunk
                                   for trans_input_chunk in
@@ -1517,7 +1518,7 @@ class Translator:
                             ", ".join(" ".join(x) for x in trans_input.constraints))
 
         # Sort longest to shortest (to rather fill batches of shorter than longer sequences)
-        input_chunks = sorted(input_chunks, key=lambda chunk: len(chunk.translator_input.tokens), reverse=True)
+        input_chunks = sorted(input_chunks, key=lambda chunk: len(chunk.translator_input), reverse=True)
 
         # translate in batch-sized blocks over input chunks
         for batch_id, batch in enumerate(utils.grouper(input_chunks, self.batch_size)):
