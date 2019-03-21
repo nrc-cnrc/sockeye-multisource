@@ -161,6 +161,7 @@ class TrainingModel(model.SockeyeModel):
                     for encoder, encoder_args in zip(self.encoders, multisource_embeds) ]
 
             #delme = multisource_encoded[0][0].infer_shape(source=(100,3,61,1))
+            # delme => [batch_size, max_seq_len, embed_dim]
             #delme = multisource_encoded[1][0].infer_shape(source=(100,3,61,1))
             #delme = multisource_encoded[2][0].infer_shape(source=(100,3,61,1))
 
@@ -168,7 +169,9 @@ class TrainingModel(model.SockeyeModel):
             #delme = multisource_encoded[1][1].infer_shape(source=(100,3,61,1))
             #delme = multisource_encoded[2][1].infer_shape(source=(100,3,61,1))
 
-            if True:
+            technic = 'enc_proj'
+            technic = 'enc_attn'
+            if technic == 'enc_proj':
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
                 multisource_encoded_concat = mx.sym.concat(
@@ -194,6 +197,15 @@ class TrainingModel(model.SockeyeModel):
                     source_encoded_length  = multisource_encoded[0][1]
                 #delme = source_encoded_length.infer_shape(source=(100,3,61,1))
                 source_encoded_seq_len = multisource_encoded[0][2]
+            elif technic == 'enc_attn':
+                #from pudb import set_trace; set_trace()
+                #source_encoded = [ source_encoded
+                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
+                #source_encoded_length = [ _source_encoded_length
+                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
+                #source_encoded_seq_len = [ _source_encoded_seq_len
+                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
+                source_encoded, source_encoded_length, source_encoded_seq_len = zip(*multisource_encoded)
             else:
                 source_encoded = multisource_encoded[0][0]
                 # TODO: Sam what length should I be using here since not all sources have the same length?

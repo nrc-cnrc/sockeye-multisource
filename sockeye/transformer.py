@@ -11,10 +11,11 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 import mxnet as mx
 import numpy as np
+import logging
 
 from . import config
 from . import constants as C
@@ -22,6 +23,9 @@ from . import layers
 
 if TYPE_CHECKING:
     from . import encoder
+
+logger = logging.getLogger(__name__)
+
 
 
 class TransformerConfig(config.Config):
@@ -42,6 +46,7 @@ class TransformerConfig(config.Config):
                  max_seq_len_target: int,
                  conv_config: Optional['encoder.ConvolutionalEmbeddingConfig'] = None,
                  lhuc: bool = False,
+                 num_multisource: int = 1,
                  dtype: str = C.DTYPE_FP32) -> None:  # type: ignore
         super().__init__()
         self.model_size = model_size
@@ -59,6 +64,7 @@ class TransformerConfig(config.Config):
         self.max_seq_len_target = max_seq_len_target
         self.conv_config = conv_config
         self.use_lhuc = lhuc
+        self.num_multisource = num_multisource
         self.dtype = dtype
 
 
@@ -140,14 +146,22 @@ class TransformerDecoderBlock:
         self.pre_enc_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                          dropout=config.dropout_prepost,
                                                          prefix="%satt_enc_pre_" % prefix)
-        self.enc_attention = layers.MultiHeadAttention(depth_att=config.model_size,
+        self.enc_attention = [ layers.MultiHeadAttention(depth_att=config.model_size,
                                                        heads=config.attention_heads,
                                                        depth_out=config.model_size,
                                                        dropout=config.dropout_attention,
-                                                       prefix="%satt_enc_" % prefix)
+                                                       prefix="%satt_enc_" % prefix) for _ in range(config.num_multisource) ]
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post_" % prefix)
+        self.enc_attn_projection = None
+        if config.num_multisource > 1:
+            logger.info("Using encoder attention projection matrix.")
+            self.enc_attn_projection = layers.OutputLayer(hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
+                                                   vocab_size=config.model_size,
+                                                   weight = None,
+                                                   weight_normalization=True,
+                                                   prefix=self.prefix + 'enc_attn_projection')
 
         self.pre_ff = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                               dropout=config.dropout_prepost,
@@ -168,8 +182,8 @@ class TransformerDecoderBlock:
     def __call__(self,
                  target: mx.sym.Symbol,
                  target_bias: mx.sym.Symbol,
-                 source: mx.sym.Symbol,
-                 source_bias: mx.sym.Symbol,
+                 source: List[mx.sym.Symbol],
+                 source_bias: List[mx.sym.Symbol],
                  cache: Optional[Dict[str, Optional[mx.sym.Symbol]]] = None) -> mx.sym.Symbol:
         # self-attention
         target_self_att = self.self_attention(inputs=self.pre_self_attention(target, None),
@@ -178,9 +192,20 @@ class TransformerDecoderBlock:
         target = self.post_self_attention(target_self_att, target)
 
         # encoder attention
-        target_enc_att = self.enc_attention(queries=self.pre_enc_attention(target, None),
-                                            memory=source,
-                                            bias=source_bias)
+        queries=self.pre_enc_attention(target, None)
+        # [ (batch, query_seq_len, output_depth), ... ]
+        target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
+                                for enc_attention, _source, _source_bias in zip(self.enc_attention, source, source_bias) ]
+        if self.enc_attn_projection is not None:
+            # TODO: Sam what dim do we need to concatenate the attentions?
+            target_enc_att_concat = mx.sym.concat(
+                    *target_enc_atts,
+                    dim=2,  # The embedding axis
+                    name='target_enc_att_concat')
+            target_enc_att = self.enc_attn_projection(target_enc_att_concat)
+        else:
+            target_enc_att = target_enc_atts[0]
+
         target = self.post_enc_attention(target_enc_att, target)
 
         # feed-forward

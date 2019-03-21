@@ -231,9 +231,9 @@ class TransformerDecoder(Decoder):
                                                               prefix=C.TARGET_POSITIONAL_EMBEDDING_PREFIX)
 
     def decode_sequence(self,
-                        source_encoded: mx.sym.Symbol,
-                        source_encoded_lengths: mx.sym.Symbol,
-                        source_encoded_max_length: int,
+                        source_encoded: List[mx.sym.Symbol],
+                        source_encoded_lengths: List[mx.sym.Symbol],
+                        source_encoded_max_length: List[int],
                         target_embed: mx.sym.Symbol,
                         target_embed_lengths: mx.sym.Symbol,
                         target_embed_max_length: int) -> mx.sym.Symbol:
@@ -251,13 +251,14 @@ class TransformerDecoder(Decoder):
         """
 
         # (batch_size * heads, max_length)
-        source_bias = transformer.get_variable_length_bias(lengths=source_encoded_lengths,
-                                                           max_length=source_encoded_max_length,
+        source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
+                                                           max_length=_source_encoded_max_length,
                                                            num_heads=self.config.attention_heads,
                                                            fold_heads=True,
                                                            name="%ssource_bias" % self.prefix)
+                            for _source_encoded_lengths, _source_encoded_max_length in zip(source_encoded_lengths, source_encoded_max_length) ]
         # (batch_size * heads, 1, max_length)
-        source_bias = mx.sym.reshape(source_bias, shape=(0, 1, -1))
+        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1)) for _source_bias in source_bias ]
 
         # (1, target_max_length, target_max_length)
         target_bias = transformer.get_autoregressive_bias(target_embed_max_length, name="%starget_bias" % self.prefix)

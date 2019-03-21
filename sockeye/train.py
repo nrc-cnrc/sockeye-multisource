@@ -517,6 +517,7 @@ def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
             max_seq_len_source=max_seq_len_source,
             max_seq_len_target=max_seq_len_target,
             conv_config=None,
+            num_multisource = len(args.source),
             lhuc=args.lhuc is not None and (C.LHUC_DECODER in args.lhuc or C.LHUC_ALL in args.lhuc))
 
     elif args.decoder == C.CONVOLUTION_TYPE:
