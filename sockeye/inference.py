@@ -217,11 +217,9 @@ class InferenceModel(model.SockeyeModel):
                     encoder.encode(*encoder_args)
                     for encoder, encoder_args in zip(self.encoders, multisource_embeds) ]
 
-            # TODO: Sam what length should I be using here since not all sources have the same length?
-            source_encoded_length = multisource_encoded[0][1]
-            source_encoded_seq_len = multisource_encoded[0][2]
-
-            if True:
+            technic = 'enc_proj'
+            technic = 'enc_attn'
+            if technic == 'enc_proj':
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
                 multisource_encoded_concat = mx.sym.concat(
@@ -233,9 +231,23 @@ class InferenceModel(model.SockeyeModel):
                     source_encoded = self.encoder2decoder(multisource_encoded_concat)
                 else:
                     source_encoded = multisource_encoded_concat
+
+                # TODO: Sam what length should I be using here since not all sources have the same length?
+                source_encoded_length = multisource_encoded[0][1]
+                source_encoded_seq_len = multisource_encoded[0][2]
+            elif technic == 'enc_attn':
+                source_encoded, source_encoded_length, source_encoded_seq_len = zip(*multisource_encoded)
             else:
                 source_encoded = multisource_encoded[0][0]
+                # TODO: Sam what length should I be using here since not all sources have the same length?
+                source_encoded_length = multisource_encoded[0][1]
+                source_encoded_seq_len = multisource_encoded[0][2]
 
+            # https://mxnet.incubator.apache.org/api/python/tools/visualization.html
+            #digraph = mx.viz.plot_network(source_encoded)
+            #digraph.view()
+
+            from pudb import set_trace; set_trace()
             # initial decoder states
             decoder_init_states = self.decoder.init_states(source_encoded,
                                                            source_encoded_length,
@@ -243,6 +255,7 @@ class InferenceModel(model.SockeyeModel):
 
             data_names = [C.SOURCE_NAME]
             label_names = []  # type: List[str]
+            #return mx.sym.Group([mx.sym.Group(d) for d in decoder_init_states]), data_names, label_names
             return mx.sym.Group(decoder_init_states), data_names, label_names
 
         default_bucket_key = self.max_input_length

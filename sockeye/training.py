@@ -162,12 +162,10 @@ class TrainingModel(model.SockeyeModel):
 
             #delme = multisource_encoded[0][0].infer_shape(source=(100,3,61,1))
             # delme => [batch_size, max_seq_len, embed_dim]
-            #delme = multisource_encoded[1][0].infer_shape(source=(100,3,61,1))
-            #delme = multisource_encoded[2][0].infer_shape(source=(100,3,61,1))
-
             #delme = multisource_encoded[0][1].infer_shape(source=(100,3,61,1))
-            #delme = multisource_encoded[1][1].infer_shape(source=(100,3,61,1))
-            #delme = multisource_encoded[2][1].infer_shape(source=(100,3,61,1))
+            # deme => (batch_size,)
+            #delme = multisource_encoded[0][2]
+            # deme => max_seq_len
 
             technic = 'enc_proj'
             technic = 'enc_attn'

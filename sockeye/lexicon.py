@@ -114,6 +114,7 @@ class TopKLexicon:
     def __init__(self,
                  vocab_source: Dict[str, int],
                  vocab_target: Dict[str, int]) -> None:
+        # TODO: Sam how do we get TopKLexicon to work in multisource?
         self.vocab_source = vocab_source
         self.vocab_target = vocab_target
         # Shape: (vocab_source_size, k), k determined at create() or load()

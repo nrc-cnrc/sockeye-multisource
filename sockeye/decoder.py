@@ -255,10 +255,11 @@ class TransformerDecoder(Decoder):
                                                            max_length=_source_encoded_max_length,
                                                            num_heads=self.config.attention_heads,
                                                            fold_heads=True,
-                                                           name="%ssource_bias" % self.prefix)
-                            for _source_encoded_lengths, _source_encoded_max_length in zip(source_encoded_lengths, source_encoded_max_length) ]
+                                                           name="%ssource_bias" % self.prefix + str(i))
+                            for i, (_source_encoded_lengths, _source_encoded_max_length) in enumerate(zip(source_encoded_lengths, source_encoded_max_length)) ]
         # (batch_size * heads, 1, max_length)
-        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1)) for _source_bias in source_bias ]
+        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
+                           for i, _source_bias in enumerate(source_bias) ]
 
         # (1, target_max_length, target_max_length)
         target_bias = transformer.get_autoregressive_bias(target_embed_max_length, name="%starget_bias" % self.prefix)
@@ -295,6 +296,7 @@ class TransformerDecoder(Decoder):
         :param states: Arbitrary list of decoder states.
         :return: logit inputs, attention probabilities, next decoder states.
         """
+        from pudb import set_trace; set_trace()
         # for step > 1, states contains source_encoded, source_encoded_lengths, and cache tensors.
         source_encoded, source_encoded_lengths, *cache = states  # type: ignore
 
@@ -306,13 +308,15 @@ class TransformerDecoder(Decoder):
         target = mx.sym.reshape(target_embed_prev, shape=(0, 1, -1))
 
         # (batch_size * heads, max_length)
-        source_bias = transformer.get_variable_length_bias(lengths=source_encoded_lengths,
-                                                           max_length=source_encoded_max_length,
+        source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
+                                                           max_length=_source_encoded_max_length,
                                                            num_heads=self.config.attention_heads,
                                                            fold_heads=True,
-                                                           name="%ssource_bias" % self.prefix)
+                                                           name="%ssource_bias" % self.prefix + str(i))
+                            for i, (_source_encoded_lengths, _source_encoded_max_length) in enumerate(zip(source_encoded_lengths, source_encoded_max_length)) ]
         # (batch_size * heads, 1, max_length)
-        source_bias = mx.sym.reshape(source_bias, shape=(0, 1, -1))
+        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
+                           for i, _source_bias in enumerate(source_bias) ]
 
         # auto-regressive bias for last position in sequence
         # (1, target_max_length, target_max_length)
@@ -365,9 +369,9 @@ class TransformerDecoder(Decoder):
         return self.config.model_size
 
     def init_states(self,
-                    source_encoded: mx.sym.Symbol,
-                    source_encoded_lengths: mx.sym.Symbol,
-                    source_encoded_max_length: int) -> List[mx.sym.Symbol]:
+                    source_encoded: List[mx.sym.Symbol],
+                    source_encoded_lengths: List[mx.sym.Symbol],
+                    source_encoded_max_length: List[int]) -> List[List[mx.sym.Symbol]]:
         """
         Returns a list of symbolic states that represent the initial states of this decoder.
         Used for inference.
@@ -377,7 +381,8 @@ class TransformerDecoder(Decoder):
         :param source_encoded_max_length: Size of encoder time dimension.
         :return: List of symbolic initial states.
         """
-        return [source_encoded, source_encoded_lengths]
+        #return [source_encoded, source_encoded_lengths]
+        return source_encoded + source_encoded_lengths
 
     def state_variables(self, target_max_length: int) -> List[mx.sym.Symbol]:
         """
