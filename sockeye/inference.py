@@ -237,17 +237,24 @@ class InferenceModel(model.SockeyeModel):
                 source_encoded_seq_len = multisource_encoded[0][2]
             elif technic == 'enc_attn':
                 source_encoded, source_encoded_length, source_encoded_seq_len = zip(*multisource_encoded)
+                source_encoded = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded],
+                    dim=1,
+                    name=C.SOURCE_ENCODED_NAME)
+                    #name='inference_source_encoded_conccat')
+                source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
+                    dim=1,
+                    name=C.SOURCE_LENGTH_NAME)
+                    #name='inference_source_encoded_length_conccat')
             else:
                 source_encoded = multisource_encoded[0][0]
                 # TODO: Sam what length should I be using here since not all sources have the same length?
-                source_encoded_length = multisource_encoded[0][1]
+                source_encoded_length  = multisource_encoded[0][1]
                 source_encoded_seq_len = multisource_encoded[0][2]
 
             # https://mxnet.incubator.apache.org/api/python/tools/visualization.html
             #digraph = mx.viz.plot_network(source_encoded)
             #digraph.view()
 
-            from pudb import set_trace; set_trace()
             # initial decoder states
             decoder_init_states = self.decoder.init_states(source_encoded,
                                                            source_encoded_length,

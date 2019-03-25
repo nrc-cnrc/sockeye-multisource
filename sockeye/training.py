@@ -196,14 +196,14 @@ class TrainingModel(model.SockeyeModel):
                 #delme = source_encoded_length.infer_shape(source=(100,3,61,1))
                 source_encoded_seq_len = multisource_encoded[0][2]
             elif technic == 'enc_attn':
-                #from pudb import set_trace; set_trace()
-                #source_encoded = [ source_encoded
-                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
-                #source_encoded_length = [ _source_encoded_length
-                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
-                #source_encoded_seq_len = [ _source_encoded_seq_len
-                #            for (source_encoded, _source_encoded_length, _source_encoded_seq_len) in multisource_encoded ]
                 source_encoded, source_encoded_length, source_encoded_seq_len = zip(*multisource_encoded)
+                source_encoded = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded],
+                    dim=1,
+                    name='training_source_encoded_concat')
+                source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
+                    dim=1,
+                    name='training_source_encoded_length_concat')
+                source_encoded_seq_len = max(source_encoded_seq_len)
             else:
                 source_encoded = multisource_encoded[0][0]
                 # TODO: Sam what length should I be using here since not all sources have the same length?

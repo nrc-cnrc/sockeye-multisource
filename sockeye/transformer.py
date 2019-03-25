@@ -154,6 +154,7 @@ class TransformerDecoderBlock:
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post_" % prefix)
+        self.num_source = config.num_multisource
         self.enc_attn_projection = None
         if config.num_multisource > 1:
             logger.info("Using encoder attention projection matrix.")
@@ -182,8 +183,8 @@ class TransformerDecoderBlock:
     def __call__(self,
                  target: mx.sym.Symbol,
                  target_bias: mx.sym.Symbol,
-                 source: List[mx.sym.Symbol],
-                 source_bias: List[mx.sym.Symbol],
+                 source: mx.sym.Symbol,
+                 source_bias: mx.sym.Symbol,
                  cache: Optional[Dict[str, Optional[mx.sym.Symbol]]] = None) -> mx.sym.Symbol:
         # self-attention
         target_self_att = self.self_attention(inputs=self.pre_self_attention(target, None),
@@ -194,6 +195,8 @@ class TransformerDecoderBlock:
         # encoder attention
         queries=self.pre_enc_attention(target, None)
         # [ (batch, query_seq_len, output_depth), ... ]
+        source      = mx.sym.split(data=source, axis=1, num_outputs=self.num_source, squeeze_axis=True)
+        source_bias = mx.sym.split(data=source_bias, axis=1, num_outputs=self.num_source, squeeze_axis=True)
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source, source_bias) ]
         if self.enc_attn_projection is not None:

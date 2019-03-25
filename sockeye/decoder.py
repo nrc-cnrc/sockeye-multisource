@@ -197,6 +197,8 @@ class Decoder(ABC):
         return None
 
 
+
+
 @Decoder.register(transformer.TransformerConfig, C.TRANSFORMER_DECODER_PREFIX)
 class TransformerDecoder(Decoder):
     """
@@ -215,6 +217,7 @@ class TransformerDecoder(Decoder):
                  config: transformer.TransformerConfig,
                  prefix: str = C.TRANSFORMER_DECODER_PREFIX) -> None:
         super().__init__(config.dtype)
+        self.num_source = config.num_multisource
         self.config = config
         self.prefix = prefix
         self.layers = [transformer.TransformerDecoderBlock(
@@ -231,9 +234,9 @@ class TransformerDecoder(Decoder):
                                                               prefix=C.TARGET_POSITIONAL_EMBEDDING_PREFIX)
 
     def decode_sequence(self,
-                        source_encoded: List[mx.sym.Symbol],
-                        source_encoded_lengths: List[mx.sym.Symbol],
-                        source_encoded_max_length: List[int],
+                        source_encoded: mx.sym.Symbol,
+                        source_encoded_lengths: mx.sym.Symbol,
+                        source_encoded_max_length: int,
                         target_embed: mx.sym.Symbol,
                         target_embed_lengths: mx.sym.Symbol,
                         target_embed_max_length: int) -> mx.sym.Symbol:
@@ -250,16 +253,23 @@ class TransformerDecoder(Decoder):
         :return: Decoder data. Shape: (batch_size, target_embed_max_length, decoder_depth).
         """
 
+        #source_encoded         = mx.sym.split(data=source_encoded, axis=0, num_outputs=2, squeeze_axis=True)
+        source_encoded_lengths = mx.sym.split(data=source_encoded_lengths,
+                axis=1,
+                num_outputs=2,
+                squeeze_axis=True)
+
         # (batch_size * heads, max_length)
         source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
-                                                           max_length=_source_encoded_max_length,
+                                                           max_length=source_encoded_max_length,
                                                            num_heads=self.config.attention_heads,
                                                            fold_heads=True,
                                                            name="%ssource_bias" % self.prefix + str(i))
-                            for i, (_source_encoded_lengths, _source_encoded_max_length) in enumerate(zip(source_encoded_lengths, source_encoded_max_length)) ]
+                            for i, _source_encoded_lengths in enumerate(source_encoded_lengths) ]
         # (batch_size * heads, 1, max_length)
         source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
                            for i, _source_bias in enumerate(source_bias) ]
+        source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
 
         # (1, target_max_length, target_max_length)
         target_bias = transformer.get_autoregressive_bias(target_embed_max_length, name="%starget_bias" % self.prefix)
@@ -296,7 +306,6 @@ class TransformerDecoder(Decoder):
         :param states: Arbitrary list of decoder states.
         :return: logit inputs, attention probabilities, next decoder states.
         """
-        from pudb import set_trace; set_trace()
         # for step > 1, states contains source_encoded, source_encoded_lengths, and cache tensors.
         source_encoded, source_encoded_lengths, *cache = states  # type: ignore
 
@@ -307,16 +316,22 @@ class TransformerDecoder(Decoder):
         # (batch_size, 1, num_embed)
         target = mx.sym.reshape(target_embed_prev, shape=(0, 1, -1))
 
+        source_encoded_lengths = mx.sym.split(data=source_encoded_lengths,
+                axis=1,
+                num_outputs=2,
+                squeeze_axis=True)
+
         # (batch_size * heads, max_length)
         source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
-                                                           max_length=_source_encoded_max_length,
+                                                           max_length=source_encoded_max_length,
                                                            num_heads=self.config.attention_heads,
                                                            fold_heads=True,
                                                            name="%ssource_bias" % self.prefix + str(i))
-                            for i, (_source_encoded_lengths, _source_encoded_max_length) in enumerate(zip(source_encoded_lengths, source_encoded_max_length)) ]
+                            for i, _source_encoded_lengths in enumerate(source_encoded_lengths) ]
         # (batch_size * heads, 1, max_length)
         source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
                            for i, _source_bias in enumerate(source_bias) ]
+        source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
 
         # auto-regressive bias for last position in sequence
         # (1, target_max_length, target_max_length)
@@ -369,9 +384,9 @@ class TransformerDecoder(Decoder):
         return self.config.model_size
 
     def init_states(self,
-                    source_encoded: List[mx.sym.Symbol],
-                    source_encoded_lengths: List[mx.sym.Symbol],
-                    source_encoded_max_length: List[int]) -> List[List[mx.sym.Symbol]]:
+                    source_encoded: mx.sym.Symbol,
+                    source_encoded_lengths: mx.sym.Symbol,
+                    source_encoded_max_length: int) -> List[mx.sym.Symbol]:
         """
         Returns a list of symbolic states that represent the initial states of this decoder.
         Used for inference.
@@ -381,8 +396,7 @@ class TransformerDecoder(Decoder):
         :param source_encoded_max_length: Size of encoder time dimension.
         :return: List of symbolic initial states.
         """
-        #return [source_encoded, source_encoded_lengths]
-        return source_encoded + source_encoded_lengths
+        return [source_encoded, source_encoded_lengths]
 
     def state_variables(self, target_max_length: int) -> List[mx.sym.Symbol]:
         """
@@ -415,9 +429,10 @@ class TransformerDecoder(Decoder):
         :return: List of shape descriptions.
         """
         shapes = [mx.io.DataDesc(C.SOURCE_ENCODED_NAME,
-                                 (batch_size, source_encoded_max_length, source_encoded_depth),
+                                 (batch_size, self.num_source, source_encoded_max_length, source_encoded_depth),
                                  layout=C.BATCH_MAJOR),
-                  mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size,), layout="N")]
+                  mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size, self.num_source, ), layout="NC")]
+                  #mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size, ), layout="NC")]
 
         if target_max_length > 1:  # no cache for initial decoder step
             for l in range(len(self.layers)):
@@ -432,6 +447,8 @@ class TransformerDecoder(Decoder):
     def get_max_seq_len(self) -> Optional[int]:
         #  The positional embeddings potentially pose a limit on the maximum length at inference time.
         return self.pos_embedding.get_max_seq_len()
+
+
 
 
 RecurrentDecoderState = NamedTuple('RecurrentDecoderState', [
