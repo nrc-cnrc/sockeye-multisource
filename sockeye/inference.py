@@ -246,13 +246,10 @@ class InferenceModel(model.SockeyeModel):
                     dim=1,
                     name=C.SOURCE_ENCODED_NAME)
                     #name='inference_source_encoded_concat')
-                if True:
-                    source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
-                        dim=1,
-                        name=C.SOURCE_LENGTH_NAME)
-                        #name='inference_source_encoded_length_concat')
-                else:
-                    source_encoded_length = source_encoded_length[0]
+                source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
+                    dim=1,
+                    name=C.SOURCE_LENGTH_NAME)
+                    #name='inference_source_encoded_length_concat')
             else:
                 source_encoded = multisource_encoded[0][0]
                 # TODO: Sam what length should I be using here since not all sources have the same length?
