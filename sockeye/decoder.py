@@ -253,23 +253,31 @@ class TransformerDecoder(Decoder):
         :return: Decoder data. Shape: (batch_size, target_embed_max_length, decoder_depth).
         """
 
-        #source_encoded         = mx.sym.split(data=source_encoded, axis=0, num_outputs=2, squeeze_axis=True)
-        source_encoded_lengths = mx.sym.split(data=source_encoded_lengths,
-                axis=1,
-                num_outputs=2,
-                squeeze_axis=True)
+        if True:
+            source_encoded_lengths = mx.sym.split(data=source_encoded_lengths,
+                    axis=1,
+                    num_outputs=2,
+                    squeeze_axis=True)
 
-        # (batch_size * heads, max_length)
-        source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
-                                                           max_length=source_encoded_max_length,
-                                                           num_heads=self.config.attention_heads,
-                                                           fold_heads=True,
-                                                           name="%ssource_bias" % self.prefix + str(i))
-                            for i, _source_encoded_lengths in enumerate(source_encoded_lengths) ]
-        # (batch_size * heads, 1, max_length)
-        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
-                           for i, _source_bias in enumerate(source_bias) ]
-        source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
+            # (batch_size * heads, max_length)
+            source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
+                                                               max_length=source_encoded_max_length,
+                                                               num_heads=self.config.attention_heads,
+                                                               fold_heads=True,
+                                                               name="%ssource_bias" % self.prefix + str(i))
+                                for i, _source_encoded_lengths in enumerate(source_encoded_lengths) ]
+            # (batch_size * heads, 1, max_length)
+            source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
+                               for i, _source_bias in enumerate(source_bias) ]
+            source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
+        else:
+            source_bias = transformer.get_variable_length_bias(lengths=source_encoded_lengths,
+                                                 max_length=source_encoded_max_length,
+                                                 num_heads=self.config.attention_heads,
+                                                 fold_heads=True,
+                                                 name="%ssource_bias" % self.prefix)
+            # (batch_size * heads, 1, max_length)
+            source_bias = mx.sym.reshape(source_bias, shape=(0, 1, -1), name='reshape_source_bias_')
 
         # (1, target_max_length, target_max_length)
         target_bias = transformer.get_autoregressive_bias(target_embed_max_length, name="%starget_bias" % self.prefix)
@@ -316,22 +324,31 @@ class TransformerDecoder(Decoder):
         # (batch_size, 1, num_embed)
         target = mx.sym.reshape(target_embed_prev, shape=(0, 1, -1))
 
-        source_encoded_lengths = mx.sym.split(data=source_encoded_lengths,
+        source_encoded_lengths_split = mx.sym.split(data=source_encoded_lengths,
                 axis=1,
                 num_outputs=2,
                 squeeze_axis=True)
 
-        # (batch_size * heads, max_length)
-        source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
-                                                           max_length=source_encoded_max_length,
-                                                           num_heads=self.config.attention_heads,
-                                                           fold_heads=True,
-                                                           name="%ssource_bias" % self.prefix + str(i))
-                            for i, _source_encoded_lengths in enumerate(source_encoded_lengths) ]
-        # (batch_size * heads, 1, max_length)
-        source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
-                           for i, _source_bias in enumerate(source_bias) ]
-        source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
+        if True:
+            # (batch_size * heads, max_length)
+            source_bias = [ transformer.get_variable_length_bias(lengths=_source_encoded_lengths,
+                                                               max_length=source_encoded_max_length,
+                                                               num_heads=self.config.attention_heads,
+                                                               fold_heads=True,
+                                                               name="%ssource_bias" % self.prefix + str(i))
+                                for i, _source_encoded_lengths in enumerate(source_encoded_lengths_split) ]
+            # (batch_size * heads, 1, max_length)
+            source_bias = [ mx.sym.reshape(_source_bias, shape=(0, 1, -1), name='reshape_source_bias_%d' % i)
+                               for i, _source_bias in enumerate(source_bias) ]
+            source_bias = mx.sym.concat(*[ d.expand_dims(axis=1) for d in source_bias], dim=1)
+        else:
+            source_bias = transformer.get_variable_length_bias(lengths=source_encoded_lengths,
+                                                 max_length=source_encoded_max_length,
+                                                 num_heads=self.config.attention_heads,
+                                                 fold_heads=True,
+                                                 name="%ssource_bias" % self.prefix)
+            # (batch_size * heads, 1, max_length)
+            source_bias = mx.sym.reshape(source_bias, shape=(0, 1, -1), name='reshape_source_bias_')
 
         # auto-regressive bias for last position in sequence
         # (1, target_max_length, target_max_length)
@@ -432,7 +449,7 @@ class TransformerDecoder(Decoder):
                                  (batch_size, self.num_source, source_encoded_max_length, source_encoded_depth),
                                  layout=C.BATCH_MAJOR),
                   mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size, self.num_source, ), layout="NC")]
-                  #mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size, ), layout="NC")]
+                  #mx.io.DataDesc(C.SOURCE_LENGTH_NAME, (batch_size, ), layout="N")]
 
         if target_max_length > 1:  # no cache for initial decoder step
             for l in range(len(self.layers)):

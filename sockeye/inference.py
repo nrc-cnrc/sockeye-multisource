@@ -186,7 +186,9 @@ class InferenceModel(model.SockeyeModel):
             source = mx.sym.Variable(C.SOURCE_NAME)
             # source => (num_samples, num_sources, max(source_len), num_factors)
             multisource = source.split(num_outputs=self.num_sources,
-                                       axis=1, squeeze_axis=True, name='multisource_batches')
+                                       axis=1,
+                                       squeeze_axis=True,
+                                       name='multisource_batches')
             # multisource => [(num_samples, max(source_len), num_factors) X num_sources]
             multisource_words = source.split(
                     num_outputs=self.num_source_factors,
@@ -196,7 +198,10 @@ class InferenceModel(model.SockeyeModel):
             # multisource_words => (num_samples, num_sources, max(source_len))
             multisource_length = utils.compute_lengths(multisource_words)
             # multisource_length => (num_samples, num_sources)
-            multisource_length = multisource_length.split(num_outputs=self.num_sources, axis=1, squeeze_axis=True, name='multisource_length')
+            multisource_length = multisource_length.split(num_outputs=self.num_sources,
+                    axis=1,
+                    squeeze_axis=True,
+                    name='multisource_length')
             # multisource_length => [(num_samples) x num_sources]
 
             # source embedding
@@ -240,11 +245,14 @@ class InferenceModel(model.SockeyeModel):
                 source_encoded = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded],
                     dim=1,
                     name=C.SOURCE_ENCODED_NAME)
-                    #name='inference_source_encoded_conccat')
-                source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
-                    dim=1,
-                    name=C.SOURCE_LENGTH_NAME)
-                    #name='inference_source_encoded_length_conccat')
+                    #name='inference_source_encoded_concat')
+                if True:
+                    source_encoded_length = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded_length],
+                        dim=1,
+                        name=C.SOURCE_LENGTH_NAME)
+                        #name='inference_source_encoded_length_concat')
+                else:
+                    source_encoded_length = source_encoded_length[0]
             else:
                 source_encoded = multisource_encoded[0][0]
                 # TODO: Sam what length should I be using here since not all sources have the same length?
@@ -1109,6 +1117,9 @@ class ModelState:
     def __init__(self, states: List[mx.nd.NDArray]) -> None:
         self.states = states
 
+    def __repr__(self):
+        return "ModelState[%s]" % ", ".join("%s" % str(s.shape) for s in self.states)
+
     def sort_state(self, best_hyp_indices: mx.nd.NDArray):
         """
         Sorts states according to k-best order from last step in beam search.
@@ -1632,7 +1643,11 @@ class Translator:
                     logger.warning("Sentence %s: %s was found in the list of phrases to avoid; "
                                    "this may indicate improper preprocessing.", trans_input.sentence_id, C.UNK_SYMBOL)
 
-        return multisource, bucket_key, raw_constraints, raw_avoid_list, mx.nd.array(max_output_lengths, ctx=self.context, dtype='int32')
+        return (multisource,
+                bucket_key,
+                raw_constraints,
+                raw_avoid_list,
+                mx.nd.array(max_output_lengths, ctx=self.context, dtype='int32'))
 
     def _make_result(self,
                      trans_input: TranslatorInput,
