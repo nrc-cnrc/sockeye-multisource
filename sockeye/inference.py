@@ -1044,6 +1044,12 @@ class NBestTranslations:
         self.attention_matrices = attention_matrices
         self.scores = scores
 
+    def __repr__(self):
+        return 'NBestTranslations[target_ids_list={t}, attention_matrices={am}, scores={s}]'.format(
+                t=self.target_ids_list,
+                am=[am.shape for am in self.attention_matrices],
+                s=self.scores)
+
 
 class Translation:
     __slots__ = ('target_ids',
@@ -1063,6 +1069,14 @@ class Translation:
         self.score = score
         self.beam_histories = beam_histories if beam_histories is not None else []
         self.nbest_translations = nbest_translations
+
+    def __repr__(self):
+        return "Translation[target_ids={t}, attention_matrix={am}, score={s}, beam_histories={bh}, nbest_translations={nt}]".format(
+                t=self.target_ids,
+                am=self.attention_matrix.shape,
+                s=self.score,
+                bh=self.beam_histories,
+                nt=self.nbest_translations)
 
 
 def empty_translation(add_nbest: bool = False) -> Translation:
