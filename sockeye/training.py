@@ -634,7 +634,8 @@ class EarlyStoppingTrainer:
             batch = next_data_batch
             self._step(self.model, batch, checkpoint_frequency, metric_train, metric_loss)
             batch_num_samples = batch.data[0].shape[0]
-            batch_num_tokens = batch.data[0].shape[1] * batch_num_samples
+            # TODO: Sam I think the number of token is not in shape[1] because num_source should be in shape[1]
+            batch_num_tokens = batch.data[0].shape[2] * batch_num_samples
             self.state.updates += 1
             self.state.samples += batch_num_samples
 
