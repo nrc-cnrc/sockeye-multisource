@@ -1254,16 +1254,17 @@ def _concat_translations(translations: List[Translation], stop_ids: Set[int],
     beam_histories = []  # type: List[BeamHistory]
 
     for idx, translation in enumerate(translations):
+        # TODO: Sam fix ugly hack that considers the first (0) source in multisource.
         if idx == len(translations) - 1:
             target_ids.extend(translation.target_ids)
-            attention_matrices.append(translation.attention_matrix)
+            attention_matrices.append(translation.attention_matrix[:,0,:])
         else:
             if translation.target_ids[-1] in stop_ids:
                 target_ids.extend(translation.target_ids[:-1])
-                attention_matrices.append(translation.attention_matrix[:-1, :])
+                attention_matrices.append(translation.attention_matrix[:-1,0, :])
             else:
                 target_ids.extend(translation.target_ids)
-                attention_matrices.append(translation.attention_matrix)
+                attention_matrices.append(translation.attention_matrix[:,0,:])
         beam_histories.extend(translation.beam_histories)
 
     # Combine attention matrices:
