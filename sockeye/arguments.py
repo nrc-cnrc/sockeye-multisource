@@ -903,22 +903,24 @@ def add_training_args(params):
                               default=.2,
                               help='Dropout probability for hidden state that combines the context with the '
                                    'RNN hidden state in the decoder. Default: %(default)s.')
+
     train_params.add_argument('--transformer-dropout-attention',
-                              type=float,
-                              default=0.1,
+                              type=multiple_values(greater_or_equal=0, data_type=float),
+                              default=(0.1,),
                               help='Dropout probability for multi-head attention. Default: %(default)s.')
     train_params.add_argument('--transformer-dropout-enc-attention',
                               type=multiple_values(greater_or_equal=0, data_type=float),
                               default=(0.1,),
                               help='Dropout probability for multi-head encoder attention. Default: %(default)s.')
     train_params.add_argument('--transformer-dropout-act',
-                              type=float,
-                              default=0.1,
+                              type=multiple_values(greater_or_equal=0, data_type=float),
+                              default=(0.1,),
                               help='Dropout probability before activation in feed-forward block. Default: %(default)s.')
     train_params.add_argument('--transformer-dropout-prepost',
-                              type=float,
-                              default=0.1,
+                              type=multiple_values(greater_or_equal=0, data_type=float),
+                              default=(0.1,),
                               help='Dropout probability for pre/postprocessing blocks. Default: %(default)s.')
+
     train_params.add_argument('--conv-embed-dropout',
                               type=float,
                               default=.0,

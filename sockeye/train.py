@@ -392,7 +392,10 @@ def create_data_iters_and_vocabs(args: argparse.Namespace,
 def create_encoder_config(args: argparse.Namespace,
                           max_seq_len_source: int,
                           max_seq_len_target: int,
-                          config_conv: Optional[encoder.ConvolutionalEmbeddingConfig]) -> Tuple[encoder.EncoderConfig,
+                          config_conv: Optional[encoder.ConvolutionalEmbeddingConfig],
+                          transformer_dropout_act: Optional[float],
+                          transformer_dropout_attention: Optional[float],
+                          transformer_dropout_prepost: Optional[float]) -> Tuple[encoder.EncoderConfig,
                                                                                                 int]:
     """
     Create the encoder config.
@@ -432,10 +435,10 @@ def create_encoder_config(args: argparse.Namespace,
             feed_forward_num_hidden=args.transformer_feed_forward_num_hidden[0],
             act_type=args.transformer_activation_type,
             num_layers=encoder_num_layers,
-            dropout_attention=args.transformer_dropout_attention,
             dropout_enc_attention=args.transformer_dropout_enc_attention,
-            dropout_act=args.transformer_dropout_act,
-            dropout_prepost=args.transformer_dropout_prepost,
+            dropout_attention=transformer_dropout_attention,
+            dropout_act=transformer_dropout_act,
+            dropout_prepost=transformer_dropout_prepost,
             positional_embedding_type=args.transformer_positional_embedding_type,
             preprocess_sequence=encoder_transformer_preprocess,
             postprocess_sequence=encoder_transformer_postprocess,
@@ -510,10 +513,10 @@ def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
             feed_forward_num_hidden=args.transformer_feed_forward_num_hidden[1],
             act_type=args.transformer_activation_type,
             num_layers=decoder_num_layers,
-            dropout_attention=args.transformer_dropout_attention,
             dropout_enc_attention=args.transformer_dropout_enc_attention,
-            dropout_act=args.transformer_dropout_act,
-            dropout_prepost=args.transformer_dropout_prepost,
+            dropout_attention=args.transformer_dropout_attention[-1],
+            dropout_act=args.transformer_dropout_act[-1],
+            dropout_prepost=args.transformer_dropout_prepost[-1],
             positional_embedding_type=args.transformer_positional_embedding_type,
             preprocess_sequence=decoder_transformer_preprocess,
             postprocess_sequence=decoder_transformer_postprocess,
@@ -661,9 +664,16 @@ def create_model_config(args: argparse.Namespace,
                                                            dropout=args.conv_embed_dropout)
 
     config_encoders = []
-    for _ in source_vocab_sizes:
-        config, encoder_num_hidden = create_encoder_config(args, max_seq_len_source, max_seq_len_target,
-                                                           config_conv)
+    # Leave-out the decoder's dropout
+    dropouts = list(zip(args.transformer_dropout_act, args.transformer_dropout_attention, args.transformer_dropout_prepost))[:-1]
+    for transformer_dropout_act, transformer_dropout_attention, transformer_dropout_prepost in dropouts:
+        config, encoder_num_hidden = create_encoder_config(args,
+                max_seq_len_source,
+                max_seq_len_target,
+                config_conv,
+                transformer_dropout_act=transformer_dropout_act,
+                transformer_dropout_attention=transformer_dropout_attention,
+                transformer_dropout_prepost=transformer_dropout_prepost)
         config_encoders.append(config)
     config_decoder = create_decoder_config(args, encoder_num_hidden, max_seq_len_source, max_seq_len_target)
 
@@ -812,15 +822,31 @@ def create_optimizer_config(args: argparse.Namespace, source_vocab_sizes: List[L
     return config
 
 
+def expand_dropout(dropouts, size):
+    if len(dropouts) < size:
+        dropouts += (dropouts[0],) * (size - len(dropouts))
+    return dropouts
+
 def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
     args = params.parse_args()
-    if len(args.transformer_dropout_enc_attention) < len(args.source):
-        short = args.transformer_dropout_enc_attention
-        args.transformer_dropout_enc_attention = short +(short[0],) * (len(args.source) - len(short))
+
+    # One dropout per source
+    args.transformer_dropout_enc_attention = expand_dropout(args.transformer_dropout_enc_attention, len(args.source))
     check_condition(len(args.transformer_dropout_enc_attention) == len(args.source),
-            "You have provided too many transformer dropout enc attention!")
+            "You have provided too many transformer dropout enc attention!" + str(args.transformer_dropout_enc_attention))
+    # Dropouts for sources and target
+    args.transformer_dropout_act       = expand_dropout(args.transformer_dropout_act, len(args.source) + 1)
+    args.transformer_dropout_attention = expand_dropout(args.transformer_dropout_attention, len(args.source) + 1)
+    args.transformer_dropout_prepost   = expand_dropout(args.transformer_dropout_prepost, len(args.source) + 1)
+    check_condition(len(args.transformer_dropout_act) == len(args.source) + 1,
+            "You have provided too many transformer dropout act!" + str(args.transformer_dropout_act))
+    check_condition(len(args.transformer_dropout_attention) == len(args.source) + 1,
+            "You have provided too many transformer dropout attention!" + str(args.transformer_dropout_attention))
+    check_condition(len(args.transformer_dropout_prepost) == len(args.source) + 1,
+            "You have provided too many transformer dropout prepost!" + str(args.transformer_dropout_prepost))
+
     train(args)
 
 
