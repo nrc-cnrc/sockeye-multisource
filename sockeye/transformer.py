@@ -20,6 +20,7 @@ import logging
 from . import config
 from . import constants as C
 from . import layers
+from .utils import check_condition
 
 if TYPE_CHECKING:
     from . import encoder
@@ -37,6 +38,7 @@ class TransformerConfig(config.Config):
                  act_type: str,
                  num_layers: int,
                  dropout_attention: float,
+                 dropout_enc_attention: List[float],
                  dropout_act: float,
                  dropout_prepost: float,
                  positional_embedding_type: str,
@@ -54,6 +56,7 @@ class TransformerConfig(config.Config):
         self.feed_forward_num_hidden = feed_forward_num_hidden
         self.act_type = act_type
         self.num_layers = num_layers
+        self.dropout_enc_attention = dropout_enc_attention
         self.dropout_attention = dropout_attention
         self.dropout_act = dropout_act
         self.dropout_prepost = dropout_prepost
@@ -146,11 +149,14 @@ class TransformerDecoderBlock:
         self.pre_enc_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                          dropout=config.dropout_prepost,
                                                          prefix="%satt_enc_pre_" % prefix)
+        check_condition(len(config.dropout_enc_attention) == config.num_multisource,
+                "Not enough dropout encoder attention values")
         self.enc_attention = [ layers.MultiHeadAttention(depth_att=config.model_size,
-                                                       heads=config.attention_heads,
-                                                       depth_out=config.model_size,
-                                                       dropout=config.dropout_attention,
-                                                       prefix="%s%datt_enc_" % (prefix, i)) for i in range(config.num_multisource) ]
+                                                         heads=config.attention_heads,
+                                                         depth_out=config.model_size,
+                                                         dropout=config.dropout_enc_attention[i],
+                                                         prefix="%s%datt_enc_" % (prefix, i))
+                                                       for i, dropout in enumerate(config.dropout_enc_attention) ]
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post_" % prefix)

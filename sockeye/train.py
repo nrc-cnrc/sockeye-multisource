@@ -433,6 +433,7 @@ def create_encoder_config(args: argparse.Namespace,
             act_type=args.transformer_activation_type,
             num_layers=encoder_num_layers,
             dropout_attention=args.transformer_dropout_attention,
+            dropout_enc_attention=args.transformer_dropout_enc_attention,
             dropout_act=args.transformer_dropout_act,
             dropout_prepost=args.transformer_dropout_prepost,
             positional_embedding_type=args.transformer_positional_embedding_type,
@@ -441,6 +442,7 @@ def create_encoder_config(args: argparse.Namespace,
             max_seq_len_source=max_seq_len_source,
             max_seq_len_target=max_seq_len_target,
             conv_config=config_conv,
+            num_multisource = len(args.source),
             lhuc=args.lhuc is not None and (C.LHUC_ENCODER in args.lhuc or C.LHUC_ALL in args.lhuc))
         encoder_num_hidden = encoder_transformer_model_size
     elif args.encoder == C.CONVOLUTION_TYPE:
@@ -509,6 +511,7 @@ def create_decoder_config(args: argparse.Namespace, encoder_num_hidden: int,
             act_type=args.transformer_activation_type,
             num_layers=decoder_num_layers,
             dropout_attention=args.transformer_dropout_attention,
+            dropout_enc_attention=args.transformer_dropout_enc_attention,
             dropout_act=args.transformer_dropout_act,
             dropout_prepost=args.transformer_dropout_prepost,
             positional_embedding_type=args.transformer_positional_embedding_type,
@@ -813,6 +816,11 @@ def main():
     params = arguments.ConfigArgumentParser(description='Train Sockeye sequence-to-sequence models.')
     arguments.add_train_cli_args(params)
     args = params.parse_args()
+    if len(args.transformer_dropout_enc_attention) < len(args.source):
+        short = args.transformer_dropout_enc_attention
+        args.transformer_dropout_enc_attention = short +(short[0],) * (len(args.source) - len(short))
+    check_condition(len(args.transformer_dropout_enc_attention) == len(args.source),
+            "You have provided too many transformer dropout enc attention!")
     train(args)
 
 

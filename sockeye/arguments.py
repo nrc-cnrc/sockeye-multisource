@@ -907,6 +907,10 @@ def add_training_args(params):
                               type=float,
                               default=0.1,
                               help='Dropout probability for multi-head attention. Default: %(default)s.')
+    train_params.add_argument('--transformer-dropout-enc-attention',
+                              type=multiple_values(greater_or_equal=0, data_type=float),
+                              default=(0.1,),
+                              help='Dropout probability for multi-head encoder attention. Default: %(default)s.')
     train_params.add_argument('--transformer-dropout-act',
                               type=float,
                               default=0.1,
