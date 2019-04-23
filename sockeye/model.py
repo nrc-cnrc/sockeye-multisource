@@ -137,7 +137,7 @@ class SockeyeModel:
 
         # multisource projection
         if num_sources > 1:
-            logger.info("Using multisource projection matrix.")
+            logger.info("Using multisource encoder2decoder projection matrix.")
             self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
                                                    vocab_size=self.decoder.get_num_hidden(),
                                                    weight = None,

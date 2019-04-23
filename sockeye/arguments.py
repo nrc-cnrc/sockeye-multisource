@@ -656,6 +656,10 @@ def add_model_parameters(params):
                               choices=C.TRANSFORMER_ACTIVATION_TYPES,
                               default=C.RELU,
                               help="Type activation to use for each feed forward layer. Default: %(default)s.")
+    model_params.add_argument('--transformer-multisource-projection-activation-type',
+                              choices=C.CNN_ACTIVATION_TYPES + [C.NO_ACTIVATION],  # Yeah,I know, CNN for Transformer to get tanh
+                              default=C.NO_ACTIVATION,
+                              help="Type activation to use for the multisource projection. Default: %(default)s.")
     model_params.add_argument('--transformer-positional-embedding-type',
                               choices=C.POSITIONAL_EMBEDDING_TYPES,
                               default=C.FIXED_POSITIONAL_EMBEDDING,

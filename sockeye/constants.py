@@ -154,6 +154,7 @@ SOFT_RELU = "softrelu"
 # Swish-1/SiLU (https://arxiv.org/pdf/1710.05941.pdf, https://arxiv.org/pdf/1702.03118.pdf)
 SWISH1 = "swish1"
 TANH = "tanh"
+NO_ACTIVATION = 'none'
 TRANSFORMER_ACTIVATION_TYPES = [GELU, RELU, SWISH1]
 CNN_ACTIVATION_TYPES = [GLU, RELU, SIGMOID, SOFT_RELU, TANH]
 

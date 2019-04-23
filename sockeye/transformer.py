@@ -36,6 +36,7 @@ class TransformerConfig(config.Config):
                  attention_heads: int,
                  feed_forward_num_hidden: int,
                  act_type: str,
+                 proj_type: str,
                  num_layers: int,
                  dropout_attention: float,
                  dropout_enc_attention: List[float],
@@ -55,6 +56,7 @@ class TransformerConfig(config.Config):
         self.attention_heads = attention_heads
         self.feed_forward_num_hidden = feed_forward_num_hidden
         self.act_type = act_type
+        self.proj_type = proj_type
         self.num_layers = num_layers
         self.dropout_enc_attention = dropout_enc_attention
         self.dropout_attention = dropout_attention
@@ -134,6 +136,7 @@ class TransformerDecoderBlock:
                  config: TransformerConfig,
                  prefix: str) -> None:
         self.prefix = prefix
+        self.proj_type = config.proj_type
         self.pre_self_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_self_pre_" % prefix)
@@ -163,7 +166,7 @@ class TransformerDecoderBlock:
         self.num_source = config.num_multisource
         self.enc_attn_projection = None
         if config.num_multisource > 1:
-            logger.info("Using encoder attention projection matrix.")
+            logger.info("Using encoder attention projection matrix with {}.".format(self.proj_type))
             self.enc_attn_projection = layers.OutputLayer(hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
                                                    vocab_size=config.model_size,
                                                    weight = None,
@@ -212,6 +215,7 @@ class TransformerDecoderBlock:
                     dim=2,  # The embedding axis
                     name='target_enc_att_concat')
             target_enc_att = self.enc_attn_projection(target_enc_att_concat)
+            target_enc_att = layers.activation(target_enc_att, act_type=self.proj_type)
         else:
             target_enc_att = target_enc_atts[0]
 

@@ -46,6 +46,8 @@ def activation(data: mx.sym.Symbol, act_type: str) -> mx.sym.Symbol:
         # Approximation of x * gaussian_cdf(x) used by Hendrycks and Gimpel
         return 0.5 * data * (1 + mx.sym.Activation((math.sqrt(2 / math.pi) * (data + (0.044715 * (data**3)))),
                                                    act_type="tanh"))
+    elif act_type == C.NO_ACTIVATION:
+        return data
     else:
         return mx.sym.Activation(data, act_type=act_type)
 
