@@ -213,7 +213,7 @@ class TransformerDecoderBlock:
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
         if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
-            assert self.enc_attn_projection is not None
+            assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
             # TODO: Sam what dim do we need to concatenate the attentions?
             target_enc_att_concat = mx.sym.concat(
                     *target_enc_atts,
