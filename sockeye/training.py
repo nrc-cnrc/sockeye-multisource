@@ -167,9 +167,7 @@ class TrainingModel(model.SockeyeModel):
             #delme = multisource_encoded[0][2]
             # deme => max_seq_len
 
-            technic = 'enc_proj'
-            technic = 'enc_attn'
-            if technic == 'enc_proj':
+            if self.config.multisource_attention_type == C.MULTISOURCE_ENCODER_COMBINATION:
                 # TODO: Sam, merge the hidden units of all sources.
                 # Note factors have already been merged.
                 multisource_encoded_concat = mx.sym.concat(
@@ -195,7 +193,7 @@ class TrainingModel(model.SockeyeModel):
                     source_encoded_length  = multisource_encoded[0][1]
                 #delme = source_encoded_length.infer_shape(source=(100,3,61,1))
                 source_encoded_seq_len = multisource_encoded[0][2]
-            elif technic == 'enc_attn':
+            elif self.config.multisource_attention_type in (C.MULTISOURCE_ATTENTION_COMBINATION, C.MULTISOURCE_HIERARCHICAL_ATTENTION):
                 source_encoded, source_encoded_length, source_encoded_seq_len = zip(*multisource_encoded)
                 source_encoded = mx.sym.concat(*[ se.expand_dims(axis=1) for se in source_encoded],
                     dim=1,

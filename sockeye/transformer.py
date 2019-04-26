@@ -47,6 +47,7 @@ class TransformerConfig(config.Config):
                  postprocess_sequence: str,
                  max_seq_len_source: int,
                  max_seq_len_target: int,
+                 multisource_attention_type: str,
                  conv_config: Optional['encoder.ConvolutionalEmbeddingConfig'] = None,
                  lhuc: bool = False,
                  num_multisource: int = 1,
@@ -71,6 +72,7 @@ class TransformerConfig(config.Config):
         self.use_lhuc = lhuc
         self.num_multisource = num_multisource
         self.dtype = dtype
+        self.multisource_attention_type = multisource_attention_type
 
 
 class TransformerEncoderBlock:
@@ -136,7 +138,10 @@ class TransformerDecoderBlock:
                  config: TransformerConfig,
                  prefix: str) -> None:
         self.prefix = prefix
+        self.num_source = config.num_multisource
         self.proj_type = config.proj_type
+        self.multisource_attention_type = config.multisource_attention_type
+
         self.pre_self_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_self_pre_" % prefix)
@@ -163,9 +168,8 @@ class TransformerDecoderBlock:
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post_" % prefix)
-        self.num_source = config.num_multisource
         self.enc_attn_projection = None
-        if config.num_multisource > 1:
+        if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION and config.num_multisource > 1:
             logger.info("Using encoder attention projection matrix with {}.".format(self.proj_type))
             self.enc_attn_projection = layers.OutputLayer(hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
                                                    vocab_size=config.model_size,
@@ -208,7 +212,8 @@ class TransformerDecoderBlock:
         source_bias_per_multisource = mx.sym.split(data=source_bias, axis=1, num_outputs=self.num_source, squeeze_axis=True)
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
-        if self.enc_attn_projection is not None:
+        if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
+            assert self.enc_attn_projection is not None
             # TODO: Sam what dim do we need to concatenate the attentions?
             target_enc_att_concat = mx.sym.concat(
                     *target_enc_atts,

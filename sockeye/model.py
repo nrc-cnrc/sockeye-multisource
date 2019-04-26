@@ -59,6 +59,7 @@ class ModelConfig(Config):
                  config_encoders: List[encoder.EncoderConfig],
                  config_decoder: decoder.DecoderConfig,
                  config_loss: loss.LossConfig,
+                 multisource_attention_type: str,
                  weight_tying: bool = False,
                  weight_tying_type: Optional[str] = C.WEIGHT_TYING_TRG_SOFTMAX,
                  weight_normalization: bool = False,
@@ -78,6 +79,7 @@ class ModelConfig(Config):
         if weight_tying and weight_tying_type is None:
             raise RuntimeError("weight_tying_type must be specified when using weight_tying.")
         self.lhuc = lhuc
+        self.multisource_attention_type = multisource_attention_type
 
     @property
     def num_source(self) -> int:
@@ -136,7 +138,7 @@ class SockeyeModel:
                                                   embed_weight=embed_weight_target)
 
         # multisource projection
-        if num_sources > 1:
+        if self.config.multisource_attention_type == C.MULTISOURCE_ENCODER_COMBINATION and num_sources > 1:
             logger.info("Using multisource encoder2decoder projection matrix.")
             self.encoder2decoder = layers.OutputLayer(hidden_size=sum(encoder.get_num_hidden() for encoder in self.encoders),
                                                    vocab_size=self.decoder.get_num_hidden(),
@@ -144,7 +146,6 @@ class SockeyeModel:
                                                    weight_normalization=self.config.weight_normalization,
                                                    prefix=self.prefix + 'multisource_embedding_projection')
         else:
-            logger.info("Not in multisource, disabling multisource projection matrix.")
             self.encoder2decoder = None
 
         # output layer

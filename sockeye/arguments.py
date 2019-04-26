@@ -660,6 +660,10 @@ def add_model_parameters(params):
                               choices=C.CNN_ACTIVATION_TYPES + [C.NO_ACTIVATION],  # Yeah,I know, CNN for Transformer to get tanh
                               default=C.NO_ACTIVATION,
                               help="Type activation to use for the multisource projection. Default: %(default)s.")
+    model_params.add_argument('--transformer-multisource-attention-type',
+                              choices=C.MULTISOURCE_ATTENTION_TYPES,
+                              default=C.MULTISOURCE_ATTENTION_COMBINATION,
+                              help="Type attention for multisource. Default: %(default)s.")
     model_params.add_argument('--transformer-positional-embedding-type',
                               choices=C.POSITIONAL_EMBEDDING_TYPES,
                               default=C.FIXED_POSITIONAL_EMBEDDING,
