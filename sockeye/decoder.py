@@ -220,8 +220,8 @@ class TransformerDecoder(Decoder):
         self.num_source = config.num_multisource
         self.config = config
         self.prefix = prefix
-        self.layers = [transformer.TransformerDecoderBlock(
-            config, prefix="%s%d_" % (prefix, i)) for i in range(config.num_layers)]
+        self.layers = [ transformer.TransformerDecoderBlock(
+            config, prefix="%s%d_" % (prefix, i)) for i in range(config.num_layers) ]
         self.final_process = transformer.TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                                  dropout=config.dropout_prepost,
                                                                  prefix="%sfinal_process_" % prefix)

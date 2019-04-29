@@ -163,19 +163,27 @@ class TransformerDecoderBlock:
                                                          heads=config.attention_heads,
                                                          depth_out=config.model_size,
                                                          dropout=config.dropout_enc_attention[i],
-                                                         prefix="%s%datt_enc_" % (prefix, i))
+                                                         prefix="%s%d_att_enc_" % (prefix, i))
                                                        for i, dropout in enumerate(config.dropout_enc_attention) ]
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post_" % prefix)
         self.enc_attn_projection = None
+        self.enc_attn_hierarchical = None
         if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION and config.num_multisource > 1:
             logger.info("Using encoder attention projection matrix with {}.".format(self.proj_type))
             self.enc_attn_projection = layers.OutputLayer(hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
                                                    vocab_size=config.model_size,
                                                    weight = None,
                                                    weight_normalization=True,
-                                                   prefix=self.prefix + 'enc_attn_projection')
+                                                   prefix='%senc_attn_projection_' % prefix)
+        elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION and config.num_multisource > 1:
+            logger.info("Using hierarchical multisource attention.")
+            self.enc_attn_hierarchical = layers.MultiHeadAttention(depth_att=config.model_size,
+                                                            heads=config.attention_heads,
+                                                            depth_out=config.model_size,
+                                                            dropout=config.dropout_attention,
+                                                            prefix="%smultisource_enc_attn_hierarchical_" % prefix)
 
         self.pre_ff = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                               dropout=config.dropout_prepost,
@@ -212,6 +220,7 @@ class TransformerDecoderBlock:
         source_bias_per_multisource = mx.sym.split(data=source_bias, axis=1, num_outputs=self.num_source, squeeze_axis=True)
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
+        #target_enc_att.shape => [(batch, query_seq_len, output_depth)]
         if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
             assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
             # TODO: Sam what dim do we need to concatenate the attentions?
@@ -221,6 +230,17 @@ class TransformerDecoderBlock:
                     name='target_enc_att_concat')
             target_enc_att = self.enc_attn_projection(target_enc_att_concat)
             target_enc_att = layers.activation(target_enc_att, act_type=self.proj_type)
+        elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION:
+            assert self.enc_attn_hierarchical is not None, "Something went wrong, the hierarchical attention wasn't initialized."
+            # TODO: Sam target_enc_att_concat should be (batch, memory_max_length, input_depth)
+            target_enc_att_concat = mx.sym.concat(
+                    *target_enc_atts,
+                    dim=1,
+                    name='target_enc_att_concat')
+            target_enc_att = self.enc_attn_hierarchical(
+                    queries=queries,
+                    memory=target_enc_att_concat,
+                    bias = mx.sym.zeros(shape=(1,1,1), name='enc_attn_hierarchical_bias'))
         else:
             target_enc_att = target_enc_atts[0]
 
