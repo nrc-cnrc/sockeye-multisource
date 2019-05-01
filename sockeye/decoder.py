@@ -221,10 +221,10 @@ class TransformerDecoder(Decoder):
         self.config = config
         self.prefix = prefix
         self.layers = [ transformer.TransformerDecoderBlock(
-            config, prefix="%s%d_" % (prefix, i)) for i in range(config.num_layers) ]
+            config, prefix="%slayer_%d/" % (prefix, i)) for i in range(config.num_layers) ]
         self.final_process = transformer.TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                                  dropout=config.dropout_prepost,
-                                                                 prefix="%sfinal_process_" % prefix)
+                                                                 prefix="%s/final_process/" % prefix[:-1])
 
         self.pos_embedding = encoder.get_positional_embedding(config.positional_embedding_type,
                                                               config.model_size,

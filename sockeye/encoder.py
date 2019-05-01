@@ -1026,11 +1026,11 @@ class TransformerEncoder(Encoder):
         super().__init__(config.dtype)
         self.config = config
         self.prefix = prefix
-        self.layers = [transformer.TransformerEncoderBlock(
-            config, prefix="%s%d_" % (prefix, i)) for i in range(config.num_layers)]
+        self.layers = [ transformer.TransformerEncoderBlock(
+            config, prefix="%slayer_%d/" % (prefix, i)) for i in range(config.num_layers) ]
         self.final_process = transformer.TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                                  dropout=config.dropout_prepost,
-                                                                 prefix="%sfinal_process_" % prefix)
+                                                                 prefix="%s/final_process/" % prefix[:-1])
 
     def __str__(self):
         return ' '.join('{}: {}'.format(str(k), str(v)) for k, v in sorted(self.__dict__.items()))
