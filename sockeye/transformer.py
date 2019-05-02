@@ -15,7 +15,6 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 
 import mxnet as mx
 import numpy as np
-import logging
 
 from . import config
 from . import constants as C
@@ -24,8 +23,6 @@ from .utils import check_condition
 
 if TYPE_CHECKING:
     from . import encoder
-
-logger = logging.getLogger(__name__)
 
 
 
@@ -137,10 +134,7 @@ class TransformerDecoderBlock:
     def __init__(self,
                  config: TransformerConfig,
                  prefix: str) -> None:
-        self.prefix = prefix
         self.num_source = config.num_multisource
-        self.proj_type = config.proj_type
-        self.multisource_attention_type = config.multisource_attention_type
 
         # Self-Attention
         self.pre_self_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
@@ -167,27 +161,10 @@ class TransformerDecoderBlock:
                                                          dropout=config.dropout_enc_attention[i],
                                                          prefix="%satt_enc_source%d/" % (prefix, i))
                                                        for i, dropout in enumerate(config.dropout_enc_attention) ]
+        self.multisource_attention = layers.get_multisource_attention(config, prefix)
         self.post_enc_attention = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_enc_post/" % prefix)
-        self.enc_attn_projection = None
-        self.enc_attn_hierarchical = None
-        if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION and config.num_multisource > 1:
-            logger.info("Using encoder attention projection matrix with {}.".format(self.proj_type))
-            self.enc_attn_projection = layers.OutputLayer(hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
-                                                   vocab_size=config.model_size,
-                                                   weight = None,
-                                                   weight_normalization=True,
-                                                   prefix='%senc_attn_projection/' % prefix)
-        elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION and config.num_multisource > 1:
-            logger.info("Using hierarchical multisource attention.")
-            self.enc_attn_hierarchical = layers.MultiHeadAttention(depth_att=config.model_size,
-                                                            heads=config.attention_heads,
-                                                            depth_out=config.model_size,
-                                                            dropout=config.dropout_attention,
-                                                            prefix="%smultisource_enc_attn_hierarchical/" % prefix)
-            self.enc_attn_hierarchical_bias = mx.sym.zeros(shape=(1,1,1),
-                    name='%senc_attn_hierarchical_bias' % prefix)
 
         # FeedFoward
         self.pre_ff = TransformerProcessBlock(sequence=config.preprocess_sequence,
@@ -241,45 +218,8 @@ class TransformerDecoderBlock:
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
         # target_enc_atts[0].infer_shape(target=(16,61), source=(16,2,61,1))   => [(16, 61, 32)]
         # target_enc_atts[0] = (batch, max_seq_length, output_depth)
-        if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
-            assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
-            target_enc_att_concat = mx.sym.concat(
-                    *target_enc_atts,
-                    dim=2,  # The embedding axis
-                    name='target_enc_att_concat')
-            # target_enc_att_concat.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 64)]
-            # target_enc_att_concat = (batch_size, max_seq_length, num_multisource x depth)
-            target_enc_att = self.enc_attn_projection(target_enc_att_concat)
-            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
-            # target_enc_att = (batch_size, max_seq_length, depth)
-            target_enc_att = layers.activation(target_enc_att, act_type=self.proj_type)
-            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
-            # target_enc_att = (batch_size, max_seq_length, depth)
-        elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION:
-            assert self.enc_attn_hierarchical is not None, "Something went wrong, the hierarchical attention wasn't initialized."
-            queries = mx.sym.reshape(queries, shape=(-3,1,-1))
-            # queries.infer_shape(target=(16,61))   => [(976, 1, 32)]
-            # queries = (batch_size x max_seq_length, 1, depth)
-            memory = mx.sym.stack(
-                    *target_enc_atts,
-                    axis=2,
-                    name='target_enc_att_concat')
-            # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 2, 32)]
-            # memory = (batch_size, max_seq_length, num_multisource, depth)
-            memory = mx.sym.reshape(memory, shape=(-3,0,0))
-            # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 2, 32)]
-            # memory = (batch_size x max_seq_length, num_multisource, depth)
-            target_enc_att = self.enc_attn_hierarchical(
-                    queries=queries,
-                    memory=memory,
-                    bias = mx.sym.zeros(shape=(1,1,1), name='enc_attn_hierarchical_bias'))
-            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 1, 32)]
-            # target_enc_att = (batch_size x max_seq_length, 1, depth)
-            target_enc_att = mx.sym.reshape_like(target_enc_att, target)
-            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
-            # target_enc_att = (batch_size, max_seq_length, depth)
-        else:
-            target_enc_att = target_enc_atts[0]
+
+        target_enc_att = self.multisource_attention(queries, target_enc_atts, target)
 
         target = self.post_enc_attention(target_enc_att, target)
 

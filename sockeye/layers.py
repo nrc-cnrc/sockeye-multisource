@@ -682,3 +682,93 @@ class PositionalEncodingsProp(mx.operator.CustomOpProp):
 
     def create_operator(self, ctx, shapes, dtypes):
         return PositionalEncodings(length=self.length, depth=self.depth)
+
+
+
+class MultisourceAttentionCombination:
+    def __init__(self, proj_type, hidden_size, vocab_size, prefix):
+        logger.info("Using encoder attention projection matrix with {}.".format(proj_type))
+        self.proj_type = proj_type
+        self.enc_attn_projection = OutputLayer(hidden_size=hidden_size,
+                                               vocab_size=vocab_size,
+                                               weight = None,
+                                               weight_normalization=True,
+                                               prefix=prefix)
+
+    def __call__(self, queries, target_enc_atts, target):
+        assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
+        target_enc_att_concat = mx.sym.concat(
+                *target_enc_atts,
+                dim=2,  # The embedding axis
+                name='target_enc_att_concat')
+        # target_enc_att_concat.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 64)]
+        # target_enc_att_concat = (batch_size, max_seq_length, num_multisource x depth)
+        target_enc_att = self.enc_attn_projection(target_enc_att_concat)
+        # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+        # target_enc_att = (batch_size, max_seq_length, depth)
+        target_enc_att = activation(target_enc_att, act_type=self.proj_type)
+        # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+        # target_enc_att = (batch_size, max_seq_length, depth)
+
+        return target_enc_att
+
+
+
+class MultisourceHierarchicalAttention:
+    def __init__(self, depth_att, heads, depth_out, dropout, prefix):
+        logger.info("Using hierarchical multisource attention.")
+        self.enc_attn_hierarchical = MultiHeadAttention(
+                depth_att=depth_att,
+                heads=heads,
+                depth_out=depth_out,
+                dropout=dropout,
+                prefix="%smultisource_enc_attn_hierarchical/" % prefix)
+        self.enc_attn_hierarchical_bias = mx.sym.zeros(shape=(1,1,1), name='%senc_attn_hierarchical_bias' % prefix)
+
+    def __call__(self, queries, target_enc_atts, target):
+        assert self.enc_attn_hierarchical is not None, "Something went wrong, the hierarchical attention wasn't initialized."
+        queries = mx.sym.reshape(queries, shape=(-3,1,-1))
+        # queries.infer_shape(target=(16,61))   => [(976, 1, 32)]
+        # queries = (batch_size x max_seq_length, 1, depth)
+        memory = mx.sym.stack(
+                *target_enc_atts,
+                axis=2,
+                name='target_enc_att_concat')
+        # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 2, 32)]
+        # memory = (batch_size, max_seq_length, num_multisource, depth)
+        memory = mx.sym.reshape(memory, shape=(-3,0,0))
+        # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 2, 32)]
+        # memory = (batch_size x max_seq_length, num_multisource, depth)
+        target_enc_att = self.enc_attn_hierarchical(
+                queries=queries,
+                memory=memory,
+                bias=self.enc_attn_hierarchical_bias)
+        # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 1, 32)]
+        # target_enc_att = (batch_size x max_seq_length, 1, depth)
+        target_enc_att = mx.sym.reshape_like(target_enc_att, target)
+        # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+        # target_enc_att = (batch_size, max_seq_length, depth)
+
+        return target_enc_att
+
+
+
+def get_multisource_attention(config, prefix):
+    layer = lambda queries, target_enc_atts, target: target_enc_atts[0]
+
+    if config.num_multisource > 1:
+        if config.multisource_attention_type == C.MULTISOURCE_ATTENTION_PROJECTION:
+            layer = MultisourceAttentionCombination(
+                    proj_type=config.proj_type,
+                    hidden_size=sum(config.model_size for _ in range(config.num_multisource)),
+                    vocab_size=config.model_size,
+                    prefix=prefix)
+        elif config.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION:
+            layer = MultisourceHierarchicalAttention(
+                    depth_att=config.model_size,
+                    heads=config.attention_heads,
+                    depth_out=config.model_size,
+                    dropout=config.dropout_attention,
+                    prefix=prefix)
+
+    return layer

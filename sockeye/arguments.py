@@ -662,7 +662,7 @@ def add_model_parameters(params):
                               help="Type activation to use for the multisource projection. Default: %(default)s.")
     model_params.add_argument('--transformer-multisource-attention-type',
                               choices=C.MULTISOURCE_ATTENTION_TYPES,
-                              default=C.MULTISOURCE_ATTENTION_COMBINATION,
+                              default=C.MULTISOURCE_ATTENTION_PROJECTION,
                               help="Type attention for multisource. Default: %(default)s.")
     model_params.add_argument('--transformer-positional-embedding-type',
                               choices=C.POSITIONAL_EMBEDDING_TYPES,

@@ -175,10 +175,10 @@ COVERAGE_TYPES = [TANH,
 
 # Transformer multisource attention
 MULTISOURCE_ENCODER_COMBINATION    = 'multisource_encoder_combination'
-MULTISOURCE_ATTENTION_COMBINATION  = 'multisource_attention_combination'
+MULTISOURCE_ATTENTION_PROJECTION   = 'multisource_attention_projection'
 MULTISOURCE_HIERARCHICAL_ATTENTION = 'multisource_hierarchical_attention'
 MULTISOURCE_ATTENTION_TYPES = (MULTISOURCE_ENCODER_COMBINATION,
-        MULTISOURCE_ATTENTION_COMBINATION,
+        MULTISOURCE_ATTENTION_PROJECTION,
         MULTISOURCE_HIERARCHICAL_ATTENTION)
 
 # default I/O variable names
