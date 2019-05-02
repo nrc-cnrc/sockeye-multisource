@@ -227,45 +227,57 @@ class TransformerDecoderBlock:
 
         # encoder attention
         queries = self.pre_enc_attention(target, None)
-        # queries.infer_shape(target=(16,61)) => (batch_size, max_seq_length, depth)
+        # queries.infer_shape(target=(16,61))   => [(16, 61, 32)]
+        # queries = (batch_size, max_seq_length, depth)
         source_per_multisource      = mx.sym.split(data=source, axis=1, num_outputs=self.num_source, squeeze_axis=True)
-        # len(source_per_multisource) => 2
-        # source_per_multisource.infer_shape(source=(16,2,61,1)) => [(batch_size, max_seq_length, depth), (batch_size, max_seq_length, depth)]
+        # len(source_per_multisource)   => 2 = num_multisource
+        # source_per_multisource.infer_shape(source=(16,2,61,1))   => [(16, 61, 32), (16, 61, 32)]
+        # source_per_multisource = [(batch_size, max_seq_length, depth), (batch_size, max_seq_length, depth)]
         source_bias_per_multisource = mx.sym.split(data=source_bias, axis=1, num_outputs=self.num_source, squeeze_axis=True)
-        # len(source_bias_per_multisource)
-        # source_bias_per_multisource.infer_shape(source=(16,2,61,1)) => [(128, 1, 61), (128, 1, 61)]
-        # source_bias_per_multisource[0].infer_shape(source=(16,2,61,1)) => [(128, 1, 61)]
+        # len(source_bias_per_multisource)   => 2 = num_multisource
+        # source_bias_per_multisource[0].infer_shape(source=(16,2,61,1))   => [(128, 1, 61)]
+        # source_bias_per_multisource = (8 x batch_size, 1, max_seq_length)
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
-        #target_enc_att.shape => [(batch, query_seq_len, output_depth)]  ???
+        # target_enc_atts[0].infer_shape(target=(16,61), source=(16,2,61,1))   => [(16, 61, 32)]
+        # target_enc_atts[0] = (batch, max_seq_length, output_depth)
         if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
             assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
-            # TODO: Sam what dim do we need to concatenate the attentions?
             target_enc_att_concat = mx.sym.concat(
                     *target_enc_atts,
                     dim=2,  # The embedding axis
                     name='target_enc_att_concat')
+            # target_enc_att_concat.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 64)]
+            # target_enc_att_concat = (batch_size, max_seq_length, num_multisource x depth)
             target_enc_att = self.enc_attn_projection(target_enc_att_concat)
+            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+            # target_enc_att = (batch_size, max_seq_length, depth)
             target_enc_att = layers.activation(target_enc_att, act_type=self.proj_type)
+            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+            # target_enc_att = (batch_size, max_seq_length, depth)
         elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION:
             assert self.enc_attn_hierarchical is not None, "Something went wrong, the hierarchical attention wasn't initialized."
             queries = mx.sym.reshape(queries, shape=(-3,1,-1))
-            # queries.infer_shape(target=(16,61)) => [(976, 1, 32)]
-            # queries = (b x ql, 1, d)
+            # queries.infer_shape(target=(16,61))   => [(976, 1, 32)]
+            # queries = (batch_size x max_seq_length, 1, depth)
             memory = mx.sym.stack(
                     *target_enc_atts,
                     axis=2,
                     name='target_enc_att_concat')
-            # memory = (b, ql, 2, d)  ???
+            # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 2, 32)]
+            # memory = (batch_size, max_seq_length, num_multisource, depth)
             memory = mx.sym.reshape(memory, shape=(-3,0,0))
-            # memory = (b x ql, 2, d)  ???
+            # memory.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 2, 32)]
+            # memory = (batch_size x max_seq_length, num_multisource, depth)
             target_enc_att = self.enc_attn_hierarchical(
                     queries=queries,
                     memory=memory,
                     bias = mx.sym.zeros(shape=(1,1,1), name='enc_attn_hierarchical_bias'))
-            # target_enc_att = (b x ql, 1, d)  ???
+            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(976, 1, 32)]
+            # target_enc_att = (batch_size x max_seq_length, 1, depth)
             target_enc_att = mx.sym.reshape_like(target_enc_att, target)
-            # target_enc_att = (b, ql, d)  ???
+            # target_enc_att.infer_shape(source=(16,2,61,1), target=(16,61))   => [(16, 61, 32)]
+            # target_enc_att = (batch_size, max_seq_length, depth)
         else:
             target_enc_att = target_enc_atts[0]
 
