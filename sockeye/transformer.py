@@ -142,6 +142,7 @@ class TransformerDecoderBlock:
         self.proj_type = config.proj_type
         self.multisource_attention_type = config.multisource_attention_type
 
+        # Self-Attention
         self.pre_self_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                           dropout=config.dropout_prepost,
                                                           prefix="%satt_self_pre/" % prefix)
@@ -154,6 +155,7 @@ class TransformerDecoderBlock:
                                                            dropout=config.dropout_prepost,
                                                            prefix="%satt_self_post/" % prefix)
 
+        # Encoder Attention
         self.pre_enc_attention = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                                          dropout=config.dropout_prepost,
                                                          prefix="%satt_enc_pre/" % prefix)
@@ -176,27 +178,31 @@ class TransformerDecoderBlock:
                                                    vocab_size=config.model_size,
                                                    weight = None,
                                                    weight_normalization=True,
-                                                   prefix='%senc_attn_projection_' % prefix)
+                                                   prefix='%senc_attn_projection/' % prefix)
         elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION and config.num_multisource > 1:
             logger.info("Using hierarchical multisource attention.")
             self.enc_attn_hierarchical = layers.MultiHeadAttention(depth_att=config.model_size,
                                                             heads=config.attention_heads,
                                                             depth_out=config.model_size,
                                                             dropout=config.dropout_attention,
-                                                            prefix="%smultisource_enc_attn_hierarchical_" % prefix)
+                                                            prefix="%smultisource_enc_attn_hierarchical/" % prefix)
+            self.enc_attn_hierarchical_bias = mx.sym.zeros(shape=(1,1,1),
+                    name='%senc_attn_hierarchical_bias' % prefix)
 
+        # FeedFoward
         self.pre_ff = TransformerProcessBlock(sequence=config.preprocess_sequence,
                                               dropout=config.dropout_prepost,
-                                              prefix="%sff_pre_" % prefix)
+                                              prefix="%sff_pre/" % prefix)
         self.ff = TransformerFeedForward(num_hidden=config.feed_forward_num_hidden,
                                          num_model=config.model_size,
                                          act_type=config.act_type,
                                          dropout=config.dropout_act,
-                                         prefix="%sff_" % prefix)
+                                         prefix="%sff/" % prefix)
         self.post_ff = TransformerProcessBlock(sequence=config.postprocess_sequence,
                                                dropout=config.dropout_prepost,
-                                               prefix="%sff_post_" % prefix)
+                                               prefix="%sff_post/" % prefix)
 
+        # Learning Hidden Unit Contribution
         self.lhuc = None
         if config.use_lhuc:
             self.lhuc = layers.LHUC(config.model_size, prefix=prefix)
@@ -207,6 +213,12 @@ class TransformerDecoderBlock:
                  source: mx.sym.Symbol,
                  source_bias: mx.sym.Symbol,
                  cache: Optional[Dict[str, Optional[mx.sym.Symbol]]] = None) -> mx.sym.Symbol:
+        # target.infer_shape(target=(16,61)) => (batch_size, max_seq_length, depth)
+        # target_bias.infer_shape() => ([], [(1, 61, 61)], [])
+        # source.infer_shape(source=(16,2,61,1)) => (batch_size, num_source, max_seq_length, depth)
+        # source_bias.infer_shape(source=(16,2,61,1)) => [(128, 2, 1, 61)]
+        # len(self.enc_attention) = num_source
+
         # self-attention
         target_self_att = self.self_attention(inputs=self.pre_self_attention(target, None),
                                               bias=target_bias,
@@ -214,13 +226,18 @@ class TransformerDecoderBlock:
         target = self.post_self_attention(target_self_att, target)
 
         # encoder attention
-        queries=self.pre_enc_attention(target, None)
-        # [ (batch, query_seq_len, output_depth), ... ]
-        source_per_multisource = mx.sym.split(data=source, axis=1, num_outputs=self.num_source, squeeze_axis=True)
+        queries = self.pre_enc_attention(target, None)
+        # queries.infer_shape(target=(16,61)) => (batch_size, max_seq_length, depth)
+        source_per_multisource      = mx.sym.split(data=source, axis=1, num_outputs=self.num_source, squeeze_axis=True)
+        # len(source_per_multisource) => 2
+        # source_per_multisource.infer_shape(source=(16,2,61,1)) => [(batch_size, max_seq_length, depth), (batch_size, max_seq_length, depth)]
         source_bias_per_multisource = mx.sym.split(data=source_bias, axis=1, num_outputs=self.num_source, squeeze_axis=True)
+        # len(source_bias_per_multisource)
+        # source_bias_per_multisource.infer_shape(source=(16,2,61,1)) => [(128, 1, 61), (128, 1, 61)]
+        # source_bias_per_multisource[0].infer_shape(source=(16,2,61,1)) => [(128, 1, 61)]
         target_enc_atts = [ enc_attention(queries=queries, memory=_source, bias=_source_bias)
                                 for enc_attention, _source, _source_bias in zip(self.enc_attention, source_per_multisource, source_bias_per_multisource) ]
-        #target_enc_att.shape => [(batch, query_seq_len, output_depth)]
+        #target_enc_att.shape => [(batch, query_seq_len, output_depth)]  ???
         if self.multisource_attention_type == C.MULTISOURCE_ATTENTION_COMBINATION:
             assert self.enc_attn_projection is not None, "Something went wrong, the encoder attention's projection matrix is not initialized."
             # TODO: Sam what dim do we need to concatenate the attentions?
@@ -232,15 +249,23 @@ class TransformerDecoderBlock:
             target_enc_att = layers.activation(target_enc_att, act_type=self.proj_type)
         elif self.multisource_attention_type == C.MULTISOURCE_HIERARCHICAL_ATTENTION:
             assert self.enc_attn_hierarchical is not None, "Something went wrong, the hierarchical attention wasn't initialized."
-            # TODO: Sam target_enc_att_concat should be (batch, memory_max_length, input_depth)
-            target_enc_att_concat = mx.sym.concat(
+            queries = mx.sym.reshape(queries, shape=(-3,1,-1))
+            # queries.infer_shape(target=(16,61)) => [(976, 1, 32)]
+            # queries = (b x ql, 1, d)
+            memory = mx.sym.stack(
                     *target_enc_atts,
-                    dim=1,
+                    axis=2,
                     name='target_enc_att_concat')
+            # memory = (b, ql, 2, d)  ???
+            memory = mx.sym.reshape(memory, shape=(-3,0,0))
+            # memory = (b x ql, 2, d)  ???
             target_enc_att = self.enc_attn_hierarchical(
                     queries=queries,
-                    memory=target_enc_att_concat,
+                    memory=memory,
                     bias = mx.sym.zeros(shape=(1,1,1), name='enc_attn_hierarchical_bias'))
+            # target_enc_att = (b x ql, 1, d)  ???
+            target_enc_att = mx.sym.reshape_like(target_enc_att, target)
+            # target_enc_att = (b, ql, d)  ???
         else:
             target_enc_att = target_enc_atts[0]
 
@@ -248,7 +273,7 @@ class TransformerDecoderBlock:
 
         # feed-forward
         target_ff = self.ff(self.pre_ff(target, None))
-        target = self.post_ff(target_ff, target)
+        target    = self.post_ff(target_ff, target)
 
         if self.lhuc:
             target = self.lhuc(target)
